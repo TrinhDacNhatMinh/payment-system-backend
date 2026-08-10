@@ -1,4 +1,4 @@
-package com.minh.payment_system;
+package com.minh.paymentsystem;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

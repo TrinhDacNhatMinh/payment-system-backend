@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -75,6 +76,11 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
 
+        // Single-device policy: Revoke all existing active tokens for this user
+        List<RefreshToken> activeTokens = refreshTokenRepository.findAllByUserAndRevokedFalse(user);
+        activeTokens.forEach(t -> t.setRevoked(true));
+        refreshTokenRepository.saveAll(activeTokens);
+
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
         String refreshTokenString = jwtTokenProvider.generateRefreshToken();
 
@@ -91,8 +97,7 @@ public class AuthServiceImpl implements AuthService {
                 accessToken,
                 refreshTokenString,
                 "Bearer",
-                jwtTokenProvider.getAccessExpiration() / 1000
-        );
+                jwtTokenProvider.getAccessExpiration() / 1000);
     }
 
     @Override
@@ -117,8 +122,7 @@ public class AuthServiceImpl implements AuthService {
                 accessToken,
                 token.getToken(),
                 "Bearer",
-                jwtTokenProvider.getAccessExpiration() / 1000
-        );
+                jwtTokenProvider.getAccessExpiration() / 1000);
     }
 
     @Override

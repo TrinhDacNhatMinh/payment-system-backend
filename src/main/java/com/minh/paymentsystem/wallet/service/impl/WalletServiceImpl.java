@@ -41,4 +41,30 @@ public class WalletServiceImpl implements WalletService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
         return WalletResponse.from(wallet);
     }
+
+    @Override
+    @Transactional
+    public void debit(Long walletId, BigDecimal amount) {
+        Wallet wallet = walletRepository.findById(walletId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
+
+        if (wallet.getBalance().compareTo(amount) < 0) {
+            throw new BusinessException(ErrorCode.WALLET_INSUFFICIENT_BALANCE);
+        }
+
+        wallet.setBalance(wallet.getBalance().subtract(amount));
+
+        walletRepository.save(wallet);
+    }
+
+    @Override
+    @Transactional
+    public void credit(Long walletId, BigDecimal amount) {
+        Wallet wallet = walletRepository.findById(walletId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
+
+        wallet.setBalance(wallet.getBalance().add(amount));
+
+        walletRepository.save(wallet);
+    }
 }

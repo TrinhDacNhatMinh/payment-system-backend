@@ -19,3 +19,9 @@ jwt:
   secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
   access-expiration: 1800000 # 30 mins
   refresh-expiration: 604800000 # 7 days
+
+vnpay:
+  tmn-code: "C3Q3HMWG"
+  hash-secret: "WELLPENAICPYHQFXZZVORFONWDYMFFEK"
+  url: "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
+  return-url: "http://localhost:8080/api/v1/payment/vnpay-return"

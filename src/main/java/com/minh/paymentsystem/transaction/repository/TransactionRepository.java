@@ -31,4 +31,21 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
             @Param("toDate") LocalDateTime toDate,
             Pageable pageable
     );
+
+    @Query("SELECT t FROM Transaction t WHERE 1=1 " +
+           "AND (:userId IS NULL OR t.wallet.user.id = :userId) " +
+           "AND (:email IS NULL OR t.wallet.user.email = :email) " +
+           "AND (:type IS NULL OR t.type = :type) " +
+           "AND (:status IS NULL OR t.status = :status) " +
+           "AND (cast(:fromDate as timestamp) IS NULL OR t.createdAt >= :fromDate) " +
+           "AND (cast(:toDate as timestamp) IS NULL OR t.createdAt <= :toDate)")
+    Page<Transaction> findWithAdminFilter(
+            @Param("userId") Long userId,
+            @Param("email") String email,
+            @Param("type") TransactionType type,
+            @Param("status") TransactionStatus status,
+            @Param("fromDate") LocalDateTime fromDate,
+            @Param("toDate") LocalDateTime toDate,
+            Pageable pageable
+    );
 }

@@ -5,6 +5,7 @@ import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.transaction.dto.TransactionFilterRequest;
 import com.minh.paymentsystem.transaction.dto.TransactionResponse;
+import com.minh.paymentsystem.transaction.dto.AdminTransactionFilterRequest;
 import com.minh.paymentsystem.transaction.entity.Transaction;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transaction.enums.TransactionType;
@@ -66,6 +67,34 @@ public class TransactionServiceImpl implements TransactionService {
 
         Page<Transaction> transactionPage = transactionRepository.findWithFilter(
                 wallet.getId(),
+                filter.type(),
+                filter.status(),
+                filter.fromDate(),
+                filter.toDate(),
+                pageable
+        );
+
+        List<TransactionResponse> content = transactionPage.getContent().stream()
+                .map(TransactionResponse::from)
+                .toList();
+
+        return new PageResponse<>(
+                content,
+                transactionPage.getNumber(),
+                transactionPage.getSize(),
+                transactionPage.getTotalElements(),
+                transactionPage.getTotalPages()
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<TransactionResponse> getAllTransactions(AdminTransactionFilterRequest filter, Pageable pageable) {
+        log.info("Admin fetching transactions with filter={}", filter);
+        
+        Page<Transaction> transactionPage = transactionRepository.findWithAdminFilter(
+                filter.userId(),
+                filter.email(),
                 filter.type(),
                 filter.status(),
                 filter.fromDate(),

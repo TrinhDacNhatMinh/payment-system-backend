@@ -11,8 +11,13 @@ import com.minh.paymentsystem.common.dto.PageResponse;
 import com.minh.paymentsystem.transaction.dto.TransactionFilterRequest;
 import com.minh.paymentsystem.transaction.dto.TransactionResponse;
 
+import com.minh.paymentsystem.transaction.dto.AdminTransactionFilterRequest;
+import org.springframework.data.domain.Pageable;
+
 public interface TransactionService {
     Transaction createTransaction(Wallet wallet, TransactionType type, TransactionStatus status, BigDecimal amount, String referenceCode, String description);
     
     PageResponse<TransactionResponse> getMyTransactions(Long userId, TransactionFilterRequest filter);
+
+    PageResponse<TransactionResponse> getAllTransactions(AdminTransactionFilterRequest filter, Pageable pageable);
 }

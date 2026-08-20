@@ -17,6 +17,7 @@ public enum ErrorCode {
     REFRESH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "Refresh token has expired"),
     REFRESH_TOKEN_REVOKED(HttpStatus.UNAUTHORIZED, "Refresh token has been revoked"),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "Access denied"),
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "User not found"),
     WALLET_NOT_FOUND(HttpStatus.NOT_FOUND, "Wallet not found"),
     WALLET_INSUFFICIENT_BALANCE(HttpStatus.BAD_REQUEST, "Insufficient balance"),
     SELF_TRANSFER_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "Cannot transfer money to yourself"),

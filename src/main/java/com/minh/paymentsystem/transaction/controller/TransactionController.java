@@ -9,6 +9,7 @@ import com.minh.paymentsystem.transaction.service.TransactionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,12 +26,18 @@ public class TransactionController {
     private final TransactionService transactionService;
 
     @Operation(summary = "Get my transaction history", description = "Retrieve a paginated and filtered list of user's transactions")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Successfully retrieved transaction history"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Validation error for pagination/filter parameters"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Wallet not found for user")
+    })
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<TransactionResponse>>> getMyTransactions(
             @ModelAttribute TransactionFilterRequest filter,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         
         PageResponse<TransactionResponse> response = transactionService.getMyTransactions(userDetails.getUserId(), filter);
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success(response));
     }
 }

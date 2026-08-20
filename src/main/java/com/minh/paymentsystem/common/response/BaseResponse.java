@@ -12,28 +12,29 @@ import java.time.Instant;
 @Builder
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class ApiResponse<T> {
+public class BaseResponse<T> {
     private final boolean success;
     private final T data;
     private final ApiError error;
     @Builder.Default
     private final Instant timestamp = Instant.now();
 
-    public static <T> ApiResponse<T> success(T data) {
-        return ApiResponse.<T>builder()
+    public static <T> BaseResponse<T> success(T data) {
+        return BaseResponse.<T>builder()
                 .success(true)
                 .data(data)
                 .build();
     }
 
-    public static <T> ApiResponse<T> success() {
+    public static <T> BaseResponse<T> success() {
         return success(null);
     }
 
-    public static <T> ApiResponse<T> error(String code, String message) {
-        return ApiResponse.<T>builder()
+    public static <T> BaseResponse<T> error(String code, String message) {
+        return BaseResponse.<T>builder()
                 .success(false)
                 .error(new ApiError(code, message))
                 .build();
     }
 }
+

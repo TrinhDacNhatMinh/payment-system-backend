@@ -3,6 +3,8 @@ package com.minh.paymentsystem.payment.controller;
 import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
 import com.minh.paymentsystem.payment.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,9 +25,9 @@ public class PaymentWebhookController {
     private final PaymentService paymentService;
 
     @Operation(summary = "VNPay IPN Webhook", description = "Server-to-server callback from VNPay to update order status")
-    @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Successfully processed webhook"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Payment order or wallet not found")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Successfully processed webhook"),
+            @ApiResponse(responseCode = "404", description = "Payment order or wallet not found")
     })
     @GetMapping("/vnpay-webhook")
     public ResponseEntity<VnpayCallbackResponse> handleVnpayWebhook(@RequestParam Map<String, String> params) {
@@ -34,9 +36,9 @@ public class PaymentWebhookController {
     }
 
     @Operation(summary = "VNPay Return URL", description = "Redirect URL for users after completing payment on VNPay")
-    @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Successfully processed return URL"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Payment order not found")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Successfully processed return URL"),
+            @ApiResponse(responseCode = "404", description = "Payment order not found")
     })
     @GetMapping("/vnpay-return")
     public ResponseEntity<String> handleVnpayReturn(@RequestParam Map<String, String> params) {

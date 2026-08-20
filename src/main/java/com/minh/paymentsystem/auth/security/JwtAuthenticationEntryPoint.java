@@ -2,7 +2,7 @@ package com.minh.paymentsystem.auth.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minh.paymentsystem.common.exception.ErrorCode;
-import com.minh.paymentsystem.common.response.ApiResponse;
+import com.minh.paymentsystem.common.response.BaseResponse;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -34,7 +34,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
             // Unauthenticated without a specific JWT error
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            ApiResponse<Void> apiResponse = ApiResponse.error(
+            BaseResponse<Void> apiResponse = BaseResponse.error(
                     "UNAUTHORIZED",
                     "Full authentication is required to access this resource");
             objectMapper.writeValue(response.getOutputStream(), apiResponse);
@@ -44,7 +44,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setStatus(errorCode.getHttpStatus().value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
-        ApiResponse<Void> apiResponse = ApiResponse.error(errorCode.name(), errorCode.getMessage());
+        BaseResponse<Void> apiResponse = BaseResponse.error(errorCode.name(), errorCode.getMessage());
         objectMapper.writeValue(response.getOutputStream(), apiResponse);
     }
 }

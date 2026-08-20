@@ -1,11 +1,12 @@
 package com.minh.paymentsystem.transfer.controller;
 
 import com.minh.paymentsystem.auth.security.CustomUserDetails;
-import com.minh.paymentsystem.common.response.ApiResponse;
+import com.minh.paymentsystem.common.response.BaseResponse;
 import com.minh.paymentsystem.transfer.dto.TransferRequest;
 import com.minh.paymentsystem.transfer.dto.TransferResponse;
 import com.minh.paymentsystem.transfer.service.TransferService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -28,17 +29,17 @@ public class TransferController {
 
     @Operation(summary = "Transfer money", description = "Transfer money from current user's wallet to another user's wallet via email.")
     @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Successfully transferred money"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Validation error, insufficient balance, or self transfer not allowed"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Recipient not found"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Concurrent modification error")
+            @ApiResponse(responseCode = "200", description = "Successfully transferred money"),
+            @ApiResponse(responseCode = "400", description = "Validation error, insufficient balance, or self transfer not allowed"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
+            @ApiResponse(responseCode = "404", description = "Recipient not found"),
+            @ApiResponse(responseCode = "409", description = "Concurrent modification error")
     })
     @PostMapping
-    public ResponseEntity<ApiResponse<TransferResponse>> transfer(
+    public ResponseEntity<BaseResponse<TransferResponse>> transfer(
             @Valid @RequestBody TransferRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         TransferResponse response = transferService.transfer(userDetails.getUserId(), request);
-        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success(response));
+        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(response));
     }
 }

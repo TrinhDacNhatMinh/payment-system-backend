@@ -1,12 +1,13 @@
 package com.minh.paymentsystem.user.controller;
 
 import com.minh.paymentsystem.common.dto.PageResponse;
-import com.minh.paymentsystem.common.response.ApiResponse;
+import com.minh.paymentsystem.common.response.BaseResponse;
 import com.minh.paymentsystem.user.dto.LockUserRequest;
 import com.minh.paymentsystem.user.dto.UserResponse;
 import com.minh.paymentsystem.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.PageRequest;
@@ -26,51 +27,51 @@ public class AdminUserController {
 
     @Operation(summary = "Get all users", description = "Retrieve a paginated list of all users in the system")
     @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Successfully retrieved users"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Forbidden - Admin access required")
+            @ApiResponse(responseCode = "200", description = "Successfully retrieved users"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Admin access required")
     })
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<PageResponse<UserResponse>>> getAllUsers(
+    public ResponseEntity<BaseResponse<PageResponse<UserResponse>>> getAllUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         Pageable pageable = PageRequest.of(page, size);
         PageResponse<UserResponse> response = userService.getAllUsers(pageable);
-        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success(response));
+        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(response));
     }
 
     @Operation(summary = "Lock a user", description = "Lock a specific user account")
     @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User successfully locked"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Forbidden - Admin access required"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+            @ApiResponse(responseCode = "200", description = "User successfully locked"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Admin access required"),
+            @ApiResponse(responseCode = "404", description = "User not found")
     })
     @PatchMapping("/{id}/lock")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<Void>> lockUser(
+    public ResponseEntity<BaseResponse<Void>> lockUser(
             @PathVariable Long id,
             @RequestBody(required = false) LockUserRequest request
     ) {
         userService.lockUser(id);
-        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success(null));
+        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(null));
     }
 
     @Operation(summary = "Unlock a user", description = "Unlock a specific user account")
     @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User successfully unlocked"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Forbidden - Admin access required"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+            @ApiResponse(responseCode = "200", description = "User successfully unlocked"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Admin access required"),
+            @ApiResponse(responseCode = "404", description = "User not found")
     })
     @PatchMapping("/{id}/unlock")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<Void>> unlockUser(
+    public ResponseEntity<BaseResponse<Void>> unlockUser(
             @PathVariable Long id
     ) {
         userService.unlockUser(id);
-        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success(null));
+        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(null));
     }
 }

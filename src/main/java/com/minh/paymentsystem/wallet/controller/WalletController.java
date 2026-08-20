@@ -1,10 +1,11 @@
 package com.minh.paymentsystem.wallet.controller;
 
 import com.minh.paymentsystem.auth.security.CustomUserDetails;
-import com.minh.paymentsystem.common.response.ApiResponse;
+import com.minh.paymentsystem.common.response.BaseResponse;
 import com.minh.paymentsystem.wallet.dto.WalletResponse;
 import com.minh.paymentsystem.wallet.service.WalletService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -25,14 +26,14 @@ public class WalletController {
 
     @Operation(summary = "Get my wallet", description = "Retrieves the wallet information for the currently authenticated user.")
     @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Successfully retrieved wallet information"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Wallet not found")
+            @ApiResponse(responseCode = "200", description = "Successfully retrieved wallet information"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
+            @ApiResponse(responseCode = "404", description = "Wallet not found")
     })
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<WalletResponse>> getMyWallet(
+    public ResponseEntity<BaseResponse<WalletResponse>> getMyWallet(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         WalletResponse wallet = walletService.getMyWallet(userDetails.getUserId());
-        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success(wallet));
+        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(wallet));
     }
 }

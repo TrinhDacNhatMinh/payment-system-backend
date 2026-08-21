@@ -3,6 +3,7 @@ package com.minh.paymentsystem.payment.controller;
 import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
 import com.minh.paymentsystem.payment.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,7 +31,7 @@ public class PaymentWebhookController {
             @ApiResponse(responseCode = "404", description = "Payment order or wallet not found")
     })
     @GetMapping("/vnpay-webhook")
-    public ResponseEntity<VnpayCallbackResponse> handleVnpayWebhook(@RequestParam Map<String, String> params) {
+    public ResponseEntity<VnpayCallbackResponse> handleVnpayWebhook(@Parameter(description = "VNPay callback parameters") @RequestParam Map<String, String> params) {
         VnpayCallbackResponse response = paymentService.handleCallback(params);
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
@@ -41,7 +42,7 @@ public class PaymentWebhookController {
             @ApiResponse(responseCode = "404", description = "Payment order not found")
     })
     @GetMapping("/vnpay-return")
-    public ResponseEntity<String> handleVnpayReturn(@RequestParam Map<String, String> params) {
+    public ResponseEntity<String> handleVnpayReturn(@Parameter(description = "VNPay callback parameters") @RequestParam Map<String, String> params) {
         String result = paymentService.processReturn(params);
         return ResponseEntity.status(HttpStatus.OK).body(result);
     }

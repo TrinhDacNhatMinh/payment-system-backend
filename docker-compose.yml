@@ -1,18 +1,29 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: payment_postgres
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/payment_db
+      SPRING_DATASOURCE_USERNAME: payment_user
+      SPRING_DATASOURCE_PASSWORD: payment_pass
+      JWT_SECRET: ${JWT_SECRET}
+      VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET}
+      VNPAY_TMN_CODE: ${VNPAY_TMN_CODE}
+
+  db:
+    image: postgres:16
+    environment:
       POSTGRES_DB: payment_db
+      POSTGRES_USER: payment_user
+      POSTGRES_PASSWORD: payment_pass
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: "no"
+      - pg_data:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
+  pg_data:
+

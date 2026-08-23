@@ -38,3 +38,6 @@ build/
 
 # Ignore sensitive config files
 src/main/resources/application-dev.yaml
+
+# Environment variables
+.env

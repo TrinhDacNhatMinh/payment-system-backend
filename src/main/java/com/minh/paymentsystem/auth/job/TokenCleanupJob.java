@@ -1,6 +1,6 @@
 package com.minh.paymentsystem.auth.job;
 
-import com.minh.paymentsystem.user.repository.RefreshTokenRepository;
+import com.minh.paymentsystem.user.service.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,7 +15,7 @@ import java.time.temporal.ChronoUnit;
 @RequiredArgsConstructor
 public class TokenCleanupJob {
 
-    private final RefreshTokenRepository refreshTokenRepository;
+    private final RefreshTokenService refreshTokenService;
 
     // Run at 02:00:00 AM every day
     @Scheduled(cron = "0 0 2 * * ?")
@@ -23,7 +23,7 @@ public class TokenCleanupJob {
     public void cleanupTokens() {
         log.info("Starting cleanup of Refresh Tokens expired for more than 7 days...");
         Instant threshold = Instant.now().minus(7, ChronoUnit.DAYS);
-        refreshTokenRepository.deleteExpiredTokensOlderThan(threshold);
+        refreshTokenService.cleanUpTokens(threshold);
         log.info("Cleanup of Refresh Tokens completed!");
     }
 }

@@ -13,8 +13,8 @@ import com.minh.paymentsystem.user.entity.RefreshToken;
 import com.minh.paymentsystem.user.entity.Role;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.user.entity.UserStatus;
-import com.minh.paymentsystem.user.repository.RefreshTokenRepository;
-import com.minh.paymentsystem.user.repository.UserRepository;
+import com.minh.paymentsystem.user.service.RefreshTokenService;
+import com.minh.paymentsystem.user.service.UserService;
 import com.minh.paymentsystem.wallet.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,15 +23,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
-    private final UserRepository userRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
+    private final UserService userService;
+    private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final WalletService walletService;
@@ -40,7 +39,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public UserResponse register(RegisterRequest request) {
         log.info("Registering new user with email: {}", request.email());
-        if (userRepository.existsByEmail(request.email())) {
+        if (userService.existsByEmail(request.email())) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
 
@@ -55,7 +54,7 @@ public class AuthServiceImpl implements AuthService {
                 .status(UserStatus.ACTIVE)
                 .build();
 
-        userRepository.save(user);
+        userService.createUser(user);
         walletService.createWalletForUser(user);
 
         return UserResponse.from(user);
@@ -65,8 +64,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public LoginResponse login(LoginRequest request) {
         log.info("Processing login for email: {}", request.email());
-        User user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
+        User user = userService.getUserByEmail(request.email());
 
         if (user.getStatus() == UserStatus.LOCKED) {
             throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
@@ -76,10 +74,7 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
 
-        // Single-device policy: Revoke all existing active tokens for this user
-        List<RefreshToken> activeTokens = refreshTokenRepository.findAllByUserAndRevokedFalse(user);
-        activeTokens.forEach(t -> t.setRevoked(true));
-        refreshTokenRepository.saveAll(activeTokens);
+        refreshTokenService.revokeAllUserTokens(user);
 
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
         String refreshTokenString = jwtTokenProvider.generateRefreshToken();
@@ -91,7 +86,7 @@ public class AuthServiceImpl implements AuthService {
                 .revoked(false)
                 .build();
 
-        refreshTokenRepository.save(refreshToken);
+        refreshTokenService.saveToken(refreshToken);
 
         return new LoginResponse(
                 accessToken,
@@ -104,8 +99,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public LoginResponse refresh(RefreshTokenRequest request) {
         log.info("Processing refresh token request");
-        RefreshToken token = refreshTokenRepository.findByToken(request.refreshToken())
-                .orElseThrow(() -> new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+        RefreshToken token = refreshTokenService.getToken(request.refreshToken());
 
         if (token.isRevoked()) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_REVOKED);
@@ -129,10 +123,9 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public void logout(RefreshTokenRequest request) {
         log.info("Processing logout request");
-        RefreshToken token = refreshTokenRepository.findByToken(request.refreshToken())
-                .orElseThrow(() -> new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+        RefreshToken token = refreshTokenService.getToken(request.refreshToken());
 
         token.setRevoked(true);
-        refreshTokenRepository.save(token);
+        refreshTokenService.saveToken(token);
     }
 }

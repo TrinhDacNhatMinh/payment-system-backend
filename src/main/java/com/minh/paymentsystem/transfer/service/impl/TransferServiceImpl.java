@@ -11,9 +11,8 @@ import com.minh.paymentsystem.transfer.dto.TransferResponse;
 import com.minh.paymentsystem.transfer.service.TransferService;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.user.entity.UserStatus;
-import com.minh.paymentsystem.user.repository.UserRepository;
+import com.minh.paymentsystem.user.service.UserService;
 import com.minh.paymentsystem.wallet.entity.Wallet;
-import com.minh.paymentsystem.wallet.repository.WalletRepository;
 import com.minh.paymentsystem.wallet.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,8 +28,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TransferServiceImpl implements TransferService {
 
-    private final UserRepository userRepository;
-    private final WalletRepository walletRepository;
+    private final UserService userService;
     private final WalletService walletService;
     private final TransactionService transactionService;
 
@@ -41,13 +39,15 @@ public class TransferServiceImpl implements TransferService {
         validateTransfer(fromUserId, request);
 
         // 2. Fetch sender wallet and recipient wallet
-        User toUser = userRepository.findByEmail(request.toEmail())
-                .orElseThrow(() -> new BusinessException(ErrorCode.RECIPIENT_NOT_FOUND));
+        User toUser;
+        try {
+            toUser = userService.getUserByEmail(request.toEmail());
+        } catch (BusinessException e) {
+            throw new BusinessException(ErrorCode.RECIPIENT_NOT_FOUND);
+        }
 
-        Wallet senderWallet = walletRepository.findByUserId(fromUserId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
-        Wallet recipientWallet = walletRepository.findByUserId(toUser.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
+        Wallet senderWallet = walletService.getWalletByUserId(fromUserId);
+        Wallet recipientWallet = walletService.getWalletByUserId(toUser.getId());
 
         // 3. Debit sender
         walletService.debit(senderWallet.getId(), request.amount());
@@ -94,15 +94,22 @@ public class TransferServiceImpl implements TransferService {
     }
 
     private void validateTransfer(Long fromUserId, TransferRequest request) {
-        User fromUser = userRepository.findById(fromUserId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCESS_DENIED));
-
+        User fromUser;
+        try {
+            fromUser = userService.getUserById(fromUserId);
+        } catch (BusinessException e) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
         if (fromUser.getEmail().equals(request.toEmail())) {
             throw new BusinessException(ErrorCode.SELF_TRANSFER_NOT_ALLOWED);
         }
 
-        User toUser = userRepository.findByEmail(request.toEmail())
-                .orElseThrow(() -> new BusinessException(ErrorCode.RECIPIENT_NOT_FOUND));
+        User toUser;
+        try {
+            toUser = userService.getUserByEmail(request.toEmail());
+        } catch (BusinessException e) {
+            throw new BusinessException(ErrorCode.RECIPIENT_NOT_FOUND);
+        }
         if (toUser.getStatus() == UserStatus.LOCKED) {
             throw new BusinessException(ErrorCode.RECIPIENT_LOCKED);
         }

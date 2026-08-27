@@ -13,9 +13,9 @@ import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.service.TransactionService;
 import com.minh.paymentsystem.user.entity.User;
-import com.minh.paymentsystem.user.repository.UserRepository;
+import com.minh.paymentsystem.user.service.UserService;
 import com.minh.paymentsystem.wallet.entity.Wallet;
-import com.minh.paymentsystem.wallet.repository.WalletRepository;
+
 import com.minh.paymentsystem.wallet.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,9 +37,8 @@ public class PaymentServiceImpl implements PaymentService {
     // Amount limits (10,000 VND - 50,000,000 VND)
     private static final BigDecimal MIN_AMOUNT = new BigDecimal("10000");
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("50000000");
-    private final UserRepository userRepository;
+    private final UserService userService;
     private final PaymentOrderRepository paymentOrderRepository;
-    private final WalletRepository walletRepository;
     private final PaymentGatewayService paymentGatewayService;
     private final WalletService walletService;
     private final TransactionService transactionService;
@@ -54,8 +53,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BusinessException(ErrorCode.AMOUNT_OUT_OF_RANGE);
         }
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACCESS_DENIED));
+        User user = userService.getUserById(userId);
 
         // 2. Generate unique orderId
         String orderId = "VNPAY_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
@@ -98,8 +96,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         String vnpResponseCode = params.get("vnp_ResponseCode");
-        Wallet wallet = walletRepository.findByUserId(paymentOrder.getUser().getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
+        Wallet wallet = walletService.getWalletByUserId(paymentOrder.getUser().getId());
 
         if ("00".equals(vnpResponseCode)) {
             // 4. If vnp_ResponseCode == "00": success, credit wallet, create Transaction

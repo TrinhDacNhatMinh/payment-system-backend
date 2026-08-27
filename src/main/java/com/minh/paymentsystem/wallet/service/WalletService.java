@@ -14,4 +14,7 @@ public interface WalletService {
     void debit(Long walletId, BigDecimal amount);
 
     void credit(Long walletId, BigDecimal amount);
+
+    // Internal API for other domains
+    Wallet getWalletByUserId(Long userId);
 }

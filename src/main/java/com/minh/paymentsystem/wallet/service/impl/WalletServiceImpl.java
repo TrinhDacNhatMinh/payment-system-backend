@@ -67,4 +67,11 @@ public class WalletServiceImpl implements WalletService {
 
         walletRepository.save(wallet);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Wallet getWalletByUserId(Long userId) {
+        return walletRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
+    }
 }

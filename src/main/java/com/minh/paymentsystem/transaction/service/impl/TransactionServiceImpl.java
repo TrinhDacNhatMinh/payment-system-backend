@@ -12,7 +12,7 @@ import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.repository.TransactionRepository;
 import com.minh.paymentsystem.transaction.service.TransactionService;
 import com.minh.paymentsystem.wallet.entity.Wallet;
-import com.minh.paymentsystem.wallet.repository.WalletRepository;
+import com.minh.paymentsystem.wallet.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -31,7 +31,7 @@ import java.util.List;
 public class TransactionServiceImpl implements TransactionService {
 
     private final TransactionRepository transactionRepository;
-    private final WalletRepository walletRepository;
+    private final WalletService walletService;
 
     @Override
     @Transactional
@@ -56,8 +56,7 @@ public class TransactionServiceImpl implements TransactionService {
         
         log.info("Fetching transactions for user id={} with filter={}", userId, filter);
         
-        Wallet wallet = walletRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
+        Wallet wallet = walletService.getWalletByUserId(userId);
 
         Pageable pageable = PageRequest.of(
                 filter.page(), 

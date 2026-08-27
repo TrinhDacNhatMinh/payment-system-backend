@@ -13,9 +13,9 @@ import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.service.TransactionService;
 import com.minh.paymentsystem.user.entity.User;
-import com.minh.paymentsystem.user.repository.UserRepository;
+import com.minh.paymentsystem.user.service.UserService;
 import com.minh.paymentsystem.wallet.entity.Wallet;
-import com.minh.paymentsystem.wallet.repository.WalletRepository;
+
 import com.minh.paymentsystem.wallet.service.WalletService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,13 +41,12 @@ import static org.mockito.Mockito.*;
 class PaymentServiceImplTest {
 
     @Mock
-    private UserRepository userRepository;
+    private UserService userService;
 
     @Mock
     private PaymentOrderRepository paymentOrderRepository;
 
-    @Mock
-    private WalletRepository walletRepository;
+
 
     @Mock
     private PaymentGatewayService paymentGatewayService;
@@ -111,7 +110,7 @@ class PaymentServiceImplTest {
         void createDepositOrder_validAmount_createsPendingOrderAndReturnsUrl() {
             // given
             DepositRequest request = new DepositRequest(new BigDecimal("50000"));
-            when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+            when(userService.getUserById(1L)).thenReturn(testUser);
             when(paymentGatewayService.buildPaymentUrl(anyString(), eq(request.amount()), eq("127.0.0.1"))).thenReturn("http://vnpay.vn/pay?id=123");
             
             ArgumentCaptor<PaymentOrder> orderCaptor = ArgumentCaptor.forClass(PaymentOrder.class);
@@ -171,7 +170,7 @@ class PaymentServiceImplTest {
             callbackParams.put("vnp_ResponseCode", "00");
             when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
             when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
-            when(walletRepository.findByUserId(1L)).thenReturn(Optional.of(testWallet));
+            when(walletService.getWalletByUserId(1L)).thenReturn(testWallet);
 
             // when
             VnpayCallbackResponse response = paymentService.handleCallback(callbackParams);
@@ -192,7 +191,7 @@ class PaymentServiceImplTest {
             callbackParams.put("vnp_ResponseCode", "24"); // Some error code
             when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
             when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
-            when(walletRepository.findByUserId(1L)).thenReturn(Optional.of(testWallet));
+            when(walletService.getWalletByUserId(1L)).thenReturn(testWallet);
 
             // when
             VnpayCallbackResponse response = paymentService.handleCallback(callbackParams);

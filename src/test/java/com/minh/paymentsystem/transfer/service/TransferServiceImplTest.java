@@ -11,9 +11,9 @@ import com.minh.paymentsystem.transfer.dto.TransferResponse;
 import com.minh.paymentsystem.transfer.service.impl.TransferServiceImpl;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.user.entity.UserStatus;
-import com.minh.paymentsystem.user.repository.UserRepository;
+import com.minh.paymentsystem.user.service.UserService;
 import com.minh.paymentsystem.wallet.entity.Wallet;
-import com.minh.paymentsystem.wallet.repository.WalletRepository;
+
 import com.minh.paymentsystem.wallet.service.WalletService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,10 +37,8 @@ import static org.mockito.Mockito.*;
 class TransferServiceImplTest {
 
     @Mock
-    private UserRepository userRepository;
+    private UserService userService;
 
-    @Mock
-    private WalletRepository walletRepository;
 
     @Mock
     private WalletService walletService;
@@ -94,7 +92,7 @@ class TransferServiceImplTest {
         void transfer_selfTransfer_throwsBusinessException() {
             // given
             TransferRequest selfRequest = new TransferRequest("sender@example.com", new BigDecimal("100000"), "Self transfer");
-            when(userRepository.findById(1L)).thenReturn(Optional.of(senderUser));
+            when(userService.getUserById(1L)).thenReturn(senderUser);
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> transferService.transfer(1L, selfRequest));
@@ -104,8 +102,8 @@ class TransferServiceImplTest {
         @Test
         void transfer_recipientNotFound_throwsBusinessException() {
             // given
-            when(userRepository.findById(1L)).thenReturn(Optional.of(senderUser));
-            when(userRepository.findByEmail(request.toEmail())).thenReturn(Optional.empty());
+            when(userService.getUserById(1L)).thenReturn(senderUser);
+            when(userService.getUserByEmail(request.toEmail())).thenThrow(new BusinessException(ErrorCode.USER_NOT_FOUND));
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> transferService.transfer(1L, request));
@@ -116,8 +114,8 @@ class TransferServiceImplTest {
         void transfer_recipientLocked_throwsBusinessException() {
             // given
             User lockedUser = User.builder().email("recipient@example.com").status(UserStatus.LOCKED).build();
-            when(userRepository.findById(1L)).thenReturn(Optional.of(senderUser));
-            when(userRepository.findByEmail(request.toEmail())).thenReturn(Optional.of(lockedUser));
+            when(userService.getUserById(1L)).thenReturn(senderUser);
+            when(userService.getUserByEmail(request.toEmail())).thenReturn(lockedUser);
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> transferService.transfer(1L, request));
@@ -128,8 +126,8 @@ class TransferServiceImplTest {
         void transfer_amountOutOfRange_throwsBusinessException() {
             // given
             TransferRequest negativeAmountRequest = new TransferRequest("recipient@example.com", new BigDecimal("-50000"), "Negative");
-            when(userRepository.findById(1L)).thenReturn(Optional.of(senderUser));
-            when(userRepository.findByEmail(request.toEmail())).thenReturn(Optional.of(recipientUser));
+            when(userService.getUserById(1L)).thenReturn(senderUser);
+            when(userService.getUserByEmail(request.toEmail())).thenReturn(recipientUser);
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> transferService.transfer(1L, negativeAmountRequest));
@@ -139,10 +137,10 @@ class TransferServiceImplTest {
         @Test
         void transfer_insufficientBalance_throwsBusinessException() {
             // given
-            when(userRepository.findById(1L)).thenReturn(Optional.of(senderUser));
-            when(userRepository.findByEmail(request.toEmail())).thenReturn(Optional.of(recipientUser));
-            when(walletRepository.findByUserId(1L)).thenReturn(Optional.of(senderWallet));
-            when(walletRepository.findByUserId(2L)).thenReturn(Optional.of(recipientWallet));
+            when(userService.getUserById(1L)).thenReturn(senderUser);
+            when(userService.getUserByEmail(request.toEmail())).thenReturn(recipientUser);
+            when(walletService.getWalletByUserId(1L)).thenReturn(senderWallet);
+            when(walletService.getWalletByUserId(2L)).thenReturn(recipientWallet);
             
             // Simulating WalletService throwing the exception during debit
             doThrow(new BusinessException(ErrorCode.WALLET_INSUFFICIENT_BALANCE))
@@ -159,10 +157,10 @@ class TransferServiceImplTest {
         @Test
         void transfer_concurrentModification_throwsOptimisticLockingFailureException() {
             // given
-            when(userRepository.findById(1L)).thenReturn(Optional.of(senderUser));
-            when(userRepository.findByEmail(request.toEmail())).thenReturn(Optional.of(recipientUser));
-            when(walletRepository.findByUserId(1L)).thenReturn(Optional.of(senderWallet));
-            when(walletRepository.findByUserId(2L)).thenReturn(Optional.of(recipientWallet));
+            when(userService.getUserById(1L)).thenReturn(senderUser);
+            when(userService.getUserByEmail(request.toEmail())).thenReturn(recipientUser);
+            when(walletService.getWalletByUserId(1L)).thenReturn(senderWallet);
+            when(walletService.getWalletByUserId(2L)).thenReturn(recipientWallet);
 
             // Simulating optimistic locking exception on credit
             doThrow(OptimisticLockingFailureException.class).when(walletService).credit(20L, request.amount());
@@ -176,10 +174,10 @@ class TransferServiceImplTest {
         @Test
         void transfer_validRequest_createsTransactionsAndUpdatesWallets() {
             // given
-            when(userRepository.findById(1L)).thenReturn(Optional.of(senderUser));
-            when(userRepository.findByEmail(request.toEmail())).thenReturn(Optional.of(recipientUser));
-            when(walletRepository.findByUserId(1L)).thenReturn(Optional.of(senderWallet));
-            when(walletRepository.findByUserId(2L)).thenReturn(Optional.of(recipientWallet));
+            when(userService.getUserById(1L)).thenReturn(senderUser);
+            when(userService.getUserByEmail(request.toEmail())).thenReturn(recipientUser);
+            when(walletService.getWalletByUserId(1L)).thenReturn(senderWallet);
+            when(walletService.getWalletByUserId(2L)).thenReturn(recipientWallet);
 
             Transaction transferOut = Transaction.builder().id(100L).build();
             Transaction transferIn = Transaction.builder().id(200L).build();

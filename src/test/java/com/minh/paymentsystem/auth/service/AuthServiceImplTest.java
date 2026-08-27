@@ -13,8 +13,8 @@ import com.minh.paymentsystem.user.entity.Role;
 import com.minh.paymentsystem.user.entity.RefreshToken;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.user.entity.UserStatus;
-import com.minh.paymentsystem.user.repository.RefreshTokenRepository;
-import com.minh.paymentsystem.user.repository.UserRepository;
+import com.minh.paymentsystem.user.service.RefreshTokenService;
+import com.minh.paymentsystem.user.service.UserService;
 import com.minh.paymentsystem.wallet.service.WalletService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,10 +41,10 @@ import static org.mockito.Mockito.*;
 public class AuthServiceImplTest {
 
     @Mock
-    private UserRepository userRepository;
+    private UserService userService;
 
     @Mock
-    private RefreshTokenRepository refreshTokenRepository;
+    private RefreshTokenService refreshTokenService;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -106,7 +106,7 @@ public class AuthServiceImplTest {
         @Test
         void register_emailAlreadyExists_throwsBusinessException() {
             // given
-            when(userRepository.existsByEmail(registerRequest.email())).thenReturn(true);
+            when(userService.existsByEmail(registerRequest.email())).thenReturn(true);
 
             // when & then
             BusinessException exception = assertThrows(BusinessException.class, () -> authService.register(registerRequest));
@@ -116,19 +116,19 @@ public class AuthServiceImplTest {
         @Test
         void register_emailAlreadyExists_doesNotSaveUser() {
             // given
-            when(userRepository.existsByEmail(registerRequest.email())).thenReturn(true);
+            when(userService.existsByEmail(registerRequest.email())).thenReturn(true);
 
             // when
             assertThrows(BusinessException.class, () -> authService.register(registerRequest));
 
             // then
-            verify(userRepository, never()).save(any());
+            verify(userService, never()).createUser(any());
         }
 
         @Test
         void register_emailAlreadyExists_doesNotCreateWallet() {
             // given
-            when(userRepository.existsByEmail(registerRequest.email())).thenReturn(true);
+            when(userService.existsByEmail(registerRequest.email())).thenReturn(true);
 
 
             // when
@@ -141,27 +141,27 @@ public class AuthServiceImplTest {
         @Test
         void register_validRequest_encodesPasswordBeforeSaving() {
             // given
-            when(userRepository.existsByEmail(registerRequest.email())).thenReturn(false);
+            when(userService.existsByEmail(registerRequest.email())).thenReturn(false);
             when((passwordEncoder.encode(registerRequest.password()))).thenReturn("encodedPassword");
 
             // when
             authService.register(registerRequest);
 
             // then
-            verify(userRepository, times(1)).save(userCaptor.capture());
+            verify(userService, times(1)).createUser(userCaptor.capture());
             assertThat(userCaptor.getValue().getPassword()).isEqualTo("encodedPassword");
         }
 
         @Test
         void register_validRequest_assignsDefaultRoleUser() {
             // given
-            when(userRepository.existsByEmail(registerRequest.email())).thenReturn(false);
+            when(userService.existsByEmail(registerRequest.email())).thenReturn(false);
 
             // when
             authService.register(registerRequest);
 
             // then
-            verify(userRepository, times(1)).save(userCaptor.capture());
+            verify(userService, times(1)).createUser(userCaptor.capture());
             assertThat(userCaptor.getValue().getRole()).isEqualTo(Role.USER);
 
         }
@@ -169,32 +169,32 @@ public class AuthServiceImplTest {
         @Test
         void register_validRequest_assignsDefaultStatusActive() {
             // given
-            when(userRepository.existsByEmail(registerRequest.email())).thenReturn(false);
+            when(userService.existsByEmail(registerRequest.email())).thenReturn(false);
 
             // when
             authService.register(registerRequest);
 
             // then
-            verify(userRepository, times(1)).save(userCaptor.capture());
+            verify(userService, times(1)).createUser(userCaptor.capture());
             assertThat(userCaptor.getValue().getStatus()).isEqualTo(UserStatus.ACTIVE);
         }
 
         @Test
         void register_validRequest_savesUserToRepository() {
             // given
-            when(userRepository.existsByEmail(registerRequest.email())).thenReturn(false);
+            when(userService.existsByEmail(registerRequest.email())).thenReturn(false);
 
             // when
             authService.register(registerRequest);
 
             // then
-            verify(userRepository, times(1)).save(any(User.class));
+            verify(userService, times(1)).createUser(any(User.class));
         }
 
         @Test
         void register_validRequest_createsWalletForNewUser() {
             // given
-            when(userRepository.existsByEmail(registerRequest.email())).thenReturn(false);
+            when(userService.existsByEmail(registerRequest.email())).thenReturn(false);
 
             // when
             authService.register(registerRequest);
@@ -206,7 +206,7 @@ public class AuthServiceImplTest {
         @Test
         void register_validRequest_returnsUserResponseWithCorrectFields() {
             // given
-            when(userRepository.existsByEmail(registerRequest.email())).thenReturn(false);
+            when(userService.existsByEmail(registerRequest.email())).thenReturn(false);
 
             // when
             UserResponse response = authService.register(registerRequest);
@@ -225,7 +225,7 @@ public class AuthServiceImplTest {
         @Test
         void login_invalidCredentials_throwsBusinessException() {
             // given
-            when(userRepository.findByEmail(loginRequest.email())).thenReturn(Optional.empty());
+            when(userService.getUserByEmail(loginRequest.email())).thenThrow(new BusinessException(ErrorCode.INVALID_CREDENTIALS));
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> authService.login(loginRequest));
@@ -236,7 +236,7 @@ public class AuthServiceImplTest {
         void login_accountLocked_throwsBusinessException() {
             // given
             User lockedUser = User.builder().status(UserStatus.LOCKED).build();
-            when(userRepository.findByEmail(loginRequest.email())).thenReturn(Optional.of(lockedUser));
+            when(userService.getUserByEmail(loginRequest.email())).thenReturn(lockedUser);
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> authService.login(loginRequest));
@@ -246,7 +246,7 @@ public class AuthServiceImplTest {
         @Test
         void login_wrongPassword_throwsBusinessException() {
             // given
-            when(userRepository.findByEmail(loginRequest.email())).thenReturn(Optional.of(user));
+            when(userService.getUserByEmail(loginRequest.email())).thenReturn(user);
             when(passwordEncoder.matches(loginRequest.password(), user.getPassword())).thenReturn(false);
 
             // when & then
@@ -257,11 +257,9 @@ public class AuthServiceImplTest {
         @Test
         void login_validCredentials_returnsTokensAndRevokesOldTokens() {
             // given
-            when(userRepository.findByEmail(loginRequest.email())).thenReturn(Optional.of(user));
+            when(userService.getUserByEmail(loginRequest.email())).thenReturn(user);
             when(passwordEncoder.matches(loginRequest.password(), user.getPassword())).thenReturn(true);
             
-            RefreshToken oldToken = RefreshToken.builder().revoked(false).build();
-            when(refreshTokenRepository.findAllByUserAndRevokedFalse(user)).thenReturn(List.of(oldToken));
             
             when(jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole())).thenReturn("new-access-token");
             when(jwtTokenProvider.generateRefreshToken()).thenReturn("new-refresh-token");
@@ -273,10 +271,9 @@ public class AuthServiceImplTest {
             LoginResponse response = authService.login(loginRequest);
 
             // then
-            assertThat(oldToken.isRevoked()).isTrue();
-            verify(refreshTokenRepository, times(1)).saveAll(anyList());
+            verify(refreshTokenService, times(1)).revokeAllUserTokens(user);
             
-            verify(refreshTokenRepository, times(1)).save(newTokenCaptor.capture());
+            verify(refreshTokenService, times(1)).saveToken(newTokenCaptor.capture());
             assertThat(newTokenCaptor.getValue().getToken()).isEqualTo("new-refresh-token");
             
             assertThat(response.accessToken()).isEqualTo("new-access-token");
@@ -291,7 +288,7 @@ public class AuthServiceImplTest {
         @Test
         void refresh_tokenNotFound_throwsBusinessException() {
             // given
-            when(refreshTokenRepository.findByToken(refreshTokenRequest.refreshToken())).thenReturn(Optional.empty());
+            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> authService.refresh(refreshTokenRequest));
@@ -302,7 +299,7 @@ public class AuthServiceImplTest {
         void refresh_tokenRevoked_throwsBusinessException() {
             // given
             validRefreshToken.setRevoked(true);
-            when(refreshTokenRepository.findByToken(refreshTokenRequest.refreshToken())).thenReturn(Optional.of(validRefreshToken));
+            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> authService.refresh(refreshTokenRequest));
@@ -313,7 +310,7 @@ public class AuthServiceImplTest {
         void refresh_tokenExpired_throwsBusinessException() {
             // given
             validRefreshToken.setExpiresAt(Instant.now().minusSeconds(10));
-            when(refreshTokenRepository.findByToken(refreshTokenRequest.refreshToken())).thenReturn(Optional.of(validRefreshToken));
+            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> authService.refresh(refreshTokenRequest));
@@ -323,7 +320,7 @@ public class AuthServiceImplTest {
         @Test
         void refresh_validToken_returnsNewToken() {
             // given
-            when(refreshTokenRepository.findByToken(refreshTokenRequest.refreshToken())).thenReturn(Optional.of(validRefreshToken));
+            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
             when(jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole())).thenReturn("new-access-token");
             when(jwtTokenProvider.getAccessExpiration()).thenReturn(3600000L);
 
@@ -343,7 +340,7 @@ public class AuthServiceImplTest {
         @Test
         void logout_tokenNotFound_throwsBusinessException() {
             // given
-            when(refreshTokenRepository.findByToken(refreshTokenRequest.refreshToken())).thenReturn(Optional.empty());
+            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> authService.logout(refreshTokenRequest));
@@ -353,14 +350,14 @@ public class AuthServiceImplTest {
         @Test
         void logout_validToken_revokesToken() {
             // given
-            when(refreshTokenRepository.findByToken(refreshTokenRequest.refreshToken())).thenReturn(Optional.of(validRefreshToken));
+            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
 
             // when
             authService.logout(refreshTokenRequest);
 
             // then
             assertThat(validRefreshToken.isRevoked()).isTrue();
-            verify(refreshTokenRepository, times(1)).save(validRefreshToken);
+            verify(refreshTokenService, times(1)).saveToken(validRefreshToken);
         }
     }
 

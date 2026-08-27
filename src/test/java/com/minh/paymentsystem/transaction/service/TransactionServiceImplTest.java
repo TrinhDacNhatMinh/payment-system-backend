@@ -11,7 +11,7 @@ import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.repository.TransactionRepository;
 import com.minh.paymentsystem.transaction.service.impl.TransactionServiceImpl;
 import com.minh.paymentsystem.wallet.entity.Wallet;
-import com.minh.paymentsystem.wallet.repository.WalletRepository;
+import com.minh.paymentsystem.wallet.service.WalletService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -42,7 +42,7 @@ class TransactionServiceImplTest {
     private TransactionRepository transactionRepository;
 
     @Mock
-    private WalletRepository walletRepository;
+    private WalletService walletService;
 
     @InjectMocks
     private TransactionServiceImpl transactionService;
@@ -93,7 +93,7 @@ class TransactionServiceImplTest {
         @Test
         void getMyTransactions_walletNotFound_throwsBusinessException() {
             // given
-            when(walletRepository.findByUserId(1L)).thenReturn(Optional.empty());
+            when(walletService.getWalletByUserId(1L)).thenThrow(new BusinessException(ErrorCode.WALLET_NOT_FOUND));
             TransactionFilterRequest filter = new TransactionFilterRequest(null, null, null, null, 0, 10);
 
             // when & then
@@ -104,7 +104,7 @@ class TransactionServiceImplTest {
         @Test
         void getMyTransactions_validFilter_returnsPageResponse() {
             // given
-            when(walletRepository.findByUserId(1L)).thenReturn(Optional.of(testWallet));
+            when(walletService.getWalletByUserId(1L)).thenReturn(testWallet);
             
             Transaction tx = Transaction.builder()
                     .id(100L)

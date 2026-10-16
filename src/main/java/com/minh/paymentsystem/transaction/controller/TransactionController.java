@@ -38,7 +38,7 @@ public class TransactionController {
     public ResponseEntity<BaseResponse<PageResponse<TransactionResponse>>> getMyTransactions(
             @ModelAttribute TransactionFilterRequest filter,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        
+
         PageResponse<TransactionResponse> response = transactionService.getMyTransactions(userDetails.getUserId(), filter);
         return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(response));
     }

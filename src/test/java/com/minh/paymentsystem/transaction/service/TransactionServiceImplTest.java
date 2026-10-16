@@ -9,7 +9,6 @@ import com.minh.paymentsystem.transaction.entity.Transaction;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.repository.TransactionRepository;
-import com.minh.paymentsystem.transaction.service.impl.TransactionServiceImpl;
 import com.minh.paymentsystem.wallet.entity.Wallet;
 import com.minh.paymentsystem.wallet.service.WalletService;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +27,6 @@ import org.springframework.data.domain.Pageable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -66,13 +64,12 @@ class TransactionServiceImplTest {
 
             // when
             transactionService.createTransaction(
-                    testWallet, 
-                    TransactionType.DEPOSIT, 
-                    TransactionStatus.SUCCESS, 
-                    new BigDecimal("100000"), 
-                    "REF123", 
-                    "Test description"
-            );
+                    testWallet,
+                    TransactionType.DEPOSIT,
+                    TransactionStatus.SUCCESS,
+                    new BigDecimal("100000"),
+                    "REF123",
+                    "Test description");
 
             // then
             verify(transactionRepository, times(1)).save(captor.capture());
@@ -97,7 +94,8 @@ class TransactionServiceImplTest {
             TransactionFilterRequest filter = new TransactionFilterRequest(null, null, null, null, 0, 10);
 
             // when & then
-            BusinessException ex = assertThrows(BusinessException.class, () -> transactionService.getMyTransactions(1L, filter));
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> transactionService.getMyTransactions(1L, filter));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.WALLET_NOT_FOUND);
         }
 
@@ -105,7 +103,7 @@ class TransactionServiceImplTest {
         void getMyTransactions_validFilter_returnsPageResponse() {
             // given
             when(walletService.getWalletByUserId(1L)).thenReturn(testWallet);
-            
+
             Transaction tx = Transaction.builder()
                     .id(100L)
                     .wallet(testWallet)
@@ -114,12 +112,11 @@ class TransactionServiceImplTest {
                     .amount(new BigDecimal("50000"))
                     .createdAt(LocalDateTime.now())
                     .build();
-                    
+
             Page<Transaction> page = new PageImpl<>(List.of(tx));
-            
+
             when(transactionRepository.findWithFilter(
-                    eq(10L), any(), any(), any(), any(), any(Pageable.class)
-            )).thenReturn(page);
+                    eq(10L), any(), any(), any(), any(), any(Pageable.class))).thenReturn(page);
 
             TransactionFilterRequest filter = new TransactionFilterRequest(null, null, null, null, 0, 10);
 

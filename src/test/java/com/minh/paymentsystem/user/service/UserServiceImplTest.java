@@ -5,7 +5,6 @@ import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.user.entity.UserStatus;
 import com.minh.paymentsystem.user.repository.UserRepository;
-import com.minh.paymentsystem.user.service.impl.UserServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

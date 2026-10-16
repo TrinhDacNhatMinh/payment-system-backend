@@ -1,6 +1,5 @@
-package com.minh.paymentsystem.payment.service.impl;
+package com.minh.paymentsystem.payment.service;
 
-import com.minh.paymentsystem.payment.service.PaymentGatewayService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -42,11 +41,11 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
         vnp_Params.put("vnp_TxnRef", orderId);
         vnp_Params.put("vnp_OrderInfo", "Nap tien vao vi " + orderId);
         vnp_Params.put("vnp_OrderType", "topup");
-        
+
         // Amount must be multiplied by 100 according to VNPay specs
         BigDecimal amountInVnPayFormat = amount.multiply(new BigDecimal("100"));
         vnp_Params.put("vnp_Amount", String.valueOf(amountInVnPayFormat.longValue()));
-        
+
         vnp_Params.put("vnp_ReturnUrl", vnpReturnUrl);
         vnp_Params.put("vnp_IpAddr", ipAddress);
 
@@ -62,7 +61,7 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
         Collections.sort(fieldNames);
         StringBuilder hashData = new StringBuilder();
         StringBuilder query = new StringBuilder();
-        
+
         Iterator<String> itr = fieldNames.iterator();
         while (itr.hasNext()) {
             String fieldName = itr.next();
@@ -71,12 +70,12 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
                 try {
                     String encodedFieldName = URLEncoder.encode(fieldName, StandardCharsets.US_ASCII);
                     String encodedFieldValue = URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII);
-                    
+
                     // Build hash data
                     hashData.append(encodedFieldName);
                     hashData.append('=');
                     hashData.append(encodedFieldValue);
-                    
+
                     // Build query
                     query.append(encodedFieldName);
                     query.append('=');
@@ -84,7 +83,7 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
                 } catch (Exception e) {
                     log.error("Error encoding URL parameter", e);
                 }
-                
+
                 if (itr.hasNext()) {
                     query.append('&');
                     hashData.append('&');
@@ -94,7 +93,7 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
 
         String queryUrl = query.toString();
         String vnp_SecureHash = hmacSHA512(vnpHashSecret, hashData.toString());
-        
+
         return vnpUrl + "?" + queryUrl + "&vnp_SecureHash=" + vnp_SecureHash;
     }
 
@@ -112,7 +111,7 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
         List<String> fieldNames = new ArrayList<>(signParams.keySet());
         Collections.sort(fieldNames);
         StringBuilder hashData = new StringBuilder();
-        
+
         Iterator<String> itr = fieldNames.iterator();
         while (itr.hasNext()) {
             String fieldName = itr.next();
@@ -125,7 +124,7 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
                 } catch (Exception e) {
                     log.error("Error encoding URL parameter for verification", e);
                 }
-                
+
                 if (itr.hasNext()) {
                     hashData.append('&');
                 }

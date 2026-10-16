@@ -10,4 +10,5 @@ public record VnpayCallbackResponse(
 
         @Schema(description = "Message from VNPay", example = "Confirm Success")
         @JsonProperty("Message") String message
-) {}
+) {
+}

@@ -8,7 +8,10 @@ import com.minh.paymentsystem.user.dto.UserResponse;
 
 public interface AuthService {
     UserResponse register(RegisterRequest request);
+
     LoginResponse login(LoginRequest request);
+
     LoginResponse refresh(RefreshTokenRequest request);
+
     void logout(RefreshTokenRequest request);
 }

@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.wallet.service.impl;
+package com.minh.paymentsystem.wallet.service;
 
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
@@ -6,7 +6,6 @@ import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.wallet.dto.WalletResponse;
 import com.minh.paymentsystem.wallet.entity.Wallet;
 import com.minh.paymentsystem.wallet.repository.WalletRepository;
-import com.minh.paymentsystem.wallet.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

@@ -16,13 +16,14 @@ import java.util.Optional;
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
     Optional<Transaction> findByReferenceCode(String referenceCode);
+
     Page<Transaction> findByWalletId(Long walletId, Pageable pageable);
 
     @Query("SELECT t FROM Transaction t WHERE t.wallet.id = :walletId " +
-           "AND (:type IS NULL OR t.type = :type) " +
-           "AND (:status IS NULL OR t.status = :status) " +
-           "AND (cast(:fromDate as timestamp) IS NULL OR t.createdAt >= :fromDate) " +
-           "AND (cast(:toDate as timestamp) IS NULL OR t.createdAt <= :toDate)")
+            "AND (:type IS NULL OR t.type = :type) " +
+            "AND (:status IS NULL OR t.status = :status) " +
+            "AND (cast(:fromDate as timestamp) IS NULL OR t.createdAt >= :fromDate) " +
+            "AND (cast(:toDate as timestamp) IS NULL OR t.createdAt <= :toDate)")
     Page<Transaction> findWithFilter(
             @Param("walletId") Long walletId,
             @Param("type") TransactionType type,
@@ -33,12 +34,12 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     );
 
     @Query("SELECT t FROM Transaction t WHERE 1=1 " +
-           "AND (:userId IS NULL OR t.wallet.user.id = :userId) " +
-           "AND (:email IS NULL OR t.wallet.user.email = :email) " +
-           "AND (:type IS NULL OR t.type = :type) " +
-           "AND (:status IS NULL OR t.status = :status) " +
-           "AND (cast(:fromDate as timestamp) IS NULL OR t.createdAt >= :fromDate) " +
-           "AND (cast(:toDate as timestamp) IS NULL OR t.createdAt <= :toDate)")
+            "AND (:userId IS NULL OR t.wallet.user.id = :userId) " +
+            "AND (:email IS NULL OR t.wallet.user.email = :email) " +
+            "AND (:type IS NULL OR t.type = :type) " +
+            "AND (:status IS NULL OR t.status = :status) " +
+            "AND (cast(:fromDate as timestamp) IS NULL OR t.createdAt >= :fromDate) " +
+            "AND (cast(:toDate as timestamp) IS NULL OR t.createdAt <= :toDate)")
     Page<Transaction> findWithAdminFilter(
             @Param("userId") Long userId,
             @Param("email") String email,

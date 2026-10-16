@@ -8,7 +8,6 @@ import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
 import com.minh.paymentsystem.payment.entity.PaymentOrder;
 import com.minh.paymentsystem.payment.enums.PaymentOrderStatus;
 import com.minh.paymentsystem.payment.repository.PaymentOrderRepository;
-import com.minh.paymentsystem.payment.service.impl.PaymentServiceImpl;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.service.TransactionService;
@@ -46,8 +45,6 @@ class PaymentServiceImplTest {
     @Mock
     private PaymentOrderRepository paymentOrderRepository;
 
-
-
     @Mock
     private PaymentGatewayService paymentGatewayService;
 
@@ -69,7 +66,7 @@ class PaymentServiceImplTest {
     void setUp() {
         testUser = User.builder().id(1L).email("test@example.com").build();
         testWallet = Wallet.builder().id(10L).user(testUser).balance(new BigDecimal("100000")).build();
-        
+
         pendingOrder = PaymentOrder.builder()
                 .id(100L)
                 .orderId("VNPAY_123")
@@ -77,7 +74,7 @@ class PaymentServiceImplTest {
                 .amount(new BigDecimal("50000"))
                 .status(PaymentOrderStatus.PENDING)
                 .build();
-                
+
         callbackParams = new HashMap<>();
         callbackParams.put("vnp_TxnRef", "VNPAY_123");
     }
@@ -92,7 +89,8 @@ class PaymentServiceImplTest {
             DepositRequest request = new DepositRequest(new BigDecimal("5000"));
 
             // when & then
-            BusinessException ex = assertThrows(BusinessException.class, () -> paymentService.createDepositOrder(1L, request, "127.0.0.1"));
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> paymentService.createDepositOrder(1L, request, "127.0.0.1"));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.AMOUNT_OUT_OF_RANGE);
         }
 
@@ -102,7 +100,8 @@ class PaymentServiceImplTest {
             DepositRequest request = new DepositRequest(new BigDecimal("100000000"));
 
             // when & then
-            BusinessException ex = assertThrows(BusinessException.class, () -> paymentService.createDepositOrder(1L, request, "127.0.0.1"));
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> paymentService.createDepositOrder(1L, request, "127.0.0.1"));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.AMOUNT_OUT_OF_RANGE);
         }
 
@@ -111,8 +110,9 @@ class PaymentServiceImplTest {
             // given
             DepositRequest request = new DepositRequest(new BigDecimal("50000"));
             when(userService.getUserById(1L)).thenReturn(testUser);
-            when(paymentGatewayService.buildPaymentUrl(anyString(), eq(request.amount()), eq("127.0.0.1"))).thenReturn("http://vnpay.vn/pay?id=123");
-            
+            when(paymentGatewayService.buildPaymentUrl(anyString(), eq(request.amount()), eq("127.0.0.1")))
+                    .thenReturn("http://vnpay.vn/pay?id=123");
+
             ArgumentCaptor<PaymentOrder> orderCaptor = ArgumentCaptor.forClass(PaymentOrder.class);
 
             // when
@@ -122,7 +122,7 @@ class PaymentServiceImplTest {
             verify(paymentOrderRepository, times(1)).save(orderCaptor.capture());
             assertThat(orderCaptor.getValue().getStatus()).isEqualTo(PaymentOrderStatus.PENDING);
             assertThat(orderCaptor.getValue().getAmount()).isEqualByComparingTo(request.amount());
-            
+
             assertThat(response.paymentUrl()).isEqualTo("http://vnpay.vn/pay?id=123");
             assertThat(response.orderId()).isNotNull();
         }
@@ -159,7 +159,7 @@ class PaymentServiceImplTest {
             // then
             assertThat(response.rspCode()).isEqualTo("02");
             assertThat(response.message()).isEqualTo("Order already confirmed");
-            
+
             verify(walletService, never()).credit(any(), any());
             verify(transactionService, never()).createTransaction(any(), any(), any(), any(), anyString(), anyString());
         }
@@ -181,7 +181,7 @@ class PaymentServiceImplTest {
             verify(transactionService, times(1)).createTransaction(
                     eq(testWallet), eq(TransactionType.DEPOSIT), eq(TransactionStatus.SUCCESS),
                     eq(new BigDecimal("50000")), eq("VNPAY_123"), anyString());
-                    
+
             assertThat(response.rspCode()).isEqualTo("00");
         }
 
@@ -202,7 +202,7 @@ class PaymentServiceImplTest {
             verify(transactionService, times(1)).createTransaction(
                     eq(testWallet), eq(TransactionType.DEPOSIT), eq(TransactionStatus.FAILED),
                     eq(new BigDecimal("50000")), eq("VNPAY_123"), anyString());
-                    
+
             assertThat(response.rspCode()).isEqualTo("00");
         }
     }

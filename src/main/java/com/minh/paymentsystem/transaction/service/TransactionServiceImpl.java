@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.transaction.service.impl;
+package com.minh.paymentsystem.transaction.service;
 
 import com.minh.paymentsystem.common.dto.PageResponse;
 import com.minh.paymentsystem.common.exception.BusinessException;
@@ -10,7 +10,6 @@ import com.minh.paymentsystem.transaction.entity.Transaction;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.repository.TransactionRepository;
-import com.minh.paymentsystem.transaction.service.TransactionService;
 import com.minh.paymentsystem.wallet.entity.Wallet;
 import com.minh.paymentsystem.wallet.service.WalletService;
 import lombok.RequiredArgsConstructor;
@@ -53,14 +52,14 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<TransactionResponse> getMyTransactions(Long userId, TransactionFilterRequest filter) {
-        
+
         log.info("Fetching transactions for user id={} with filter={}", userId, filter);
-        
+
         Wallet wallet = walletService.getWalletByUserId(userId);
 
         Pageable pageable = PageRequest.of(
-                filter.page(), 
-                filter.size(), 
+                filter.page(),
+                filter.size(),
                 Sort.by("createdAt").descending()
         );
 
@@ -90,7 +89,7 @@ public class TransactionServiceImpl implements TransactionService {
     @Transactional(readOnly = true)
     public PageResponse<TransactionResponse> getAllTransactions(AdminTransactionFilterRequest filter, Pageable pageable) {
         log.info("Admin fetching transactions with filter={}", filter);
-        
+
         Page<Transaction> transactionPage = transactionRepository.findWithAdminFilter(
                 filter.userId(),
                 filter.email(),

@@ -1,11 +1,10 @@
-package com.minh.paymentsystem.auth.service.impl;
+package com.minh.paymentsystem.auth.service;
 
 import com.minh.paymentsystem.auth.dto.LoginRequest;
 import com.minh.paymentsystem.auth.dto.LoginResponse;
 import com.minh.paymentsystem.auth.dto.RefreshTokenRequest;
 import com.minh.paymentsystem.auth.dto.RegisterRequest;
 import com.minh.paymentsystem.auth.security.JwtTokenProvider;
-import com.minh.paymentsystem.auth.service.AuthService;
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.user.dto.UserResponse;

@@ -8,7 +8,6 @@ import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.service.TransactionService;
 import com.minh.paymentsystem.transfer.dto.TransferRequest;
 import com.minh.paymentsystem.transfer.dto.TransferResponse;
-import com.minh.paymentsystem.transfer.service.impl.TransferServiceImpl;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.user.entity.UserStatus;
 import com.minh.paymentsystem.user.service.UserService;
@@ -26,7 +25,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.math.BigDecimal;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,7 +36,6 @@ class TransferServiceImplTest {
 
     @Mock
     private UserService userService;
-
 
     @Mock
     private WalletService walletService;
@@ -141,7 +138,7 @@ class TransferServiceImplTest {
             when(userService.getUserByEmail(request.toEmail())).thenReturn(recipientUser);
             when(walletService.getWalletByUserId(1L)).thenReturn(senderWallet);
             when(walletService.getWalletByUserId(2L)).thenReturn(recipientWallet);
-            
+
             // Simulating WalletService throwing the exception during debit
             doThrow(new BusinessException(ErrorCode.WALLET_INSUFFICIENT_BALANCE))
                     .when(walletService).debit(10L, request.amount());

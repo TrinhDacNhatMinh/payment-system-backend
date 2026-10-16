@@ -108,7 +108,8 @@ class TransferServiceConcurrencyTest {
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
 
-        TransferRequest request = new TransferRequest("receiver@test.com", new BigDecimal("10000.00"), "Concurrent Transfer");
+        TransferRequest request = new TransferRequest("receiver@test.com", new BigDecimal("10000.00"),
+                "Concurrent Transfer");
 
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger failCount = new AtomicInteger(0);
@@ -127,7 +128,8 @@ class TransferServiceConcurrencyTest {
                         failCount.incrementAndGet();
                         log.warn("Caught expected BusinessException: {}", e.getMessage());
                     } else if (e.getErrorCode() == ErrorCode.WALLET_INSUFFICIENT_BALANCE) {
-                        // Depending on DB isolation and timing, it might fail with INSUFFICIENT_BALANCE if it reads after the first one commits
+                        // Depending on DB isolation and timing, it might fail with INSUFFICIENT_BALANCE
+                        // if it reads after the first one commits
                         failCount.incrementAndGet();
                         log.warn("Caught expected INSUFFICIENT_BALANCE: {}", e.getMessage());
                     }
@@ -149,7 +151,8 @@ class TransferServiceConcurrencyTest {
                         log.warn("Caught expected Optimistic Locking Exception: {}", e.getMessage());
                     } else {
                         log.error("Unexpected exception: ", e);
-                        // Still increment failCount so we know it failed, but assertion on type of failure might be manual
+                        // Still increment failCount so we know it failed, but assertion on type of
+                        // failure might be manual
                         failCount.incrementAndGet();
                     }
                 } finally {

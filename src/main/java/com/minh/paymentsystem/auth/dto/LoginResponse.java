@@ -14,4 +14,5 @@ public record LoginResponse(
 
         @Schema(description = "Access token expiration time in milliseconds", example = "3600000")
         long expiresIn
-) {}
+) {
+}

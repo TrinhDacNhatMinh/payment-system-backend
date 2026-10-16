@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.transfer.service.impl;
+package com.minh.paymentsystem.transfer.service;
 
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
@@ -8,7 +8,6 @@ import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.service.TransactionService;
 import com.minh.paymentsystem.transfer.dto.TransferRequest;
 import com.minh.paymentsystem.transfer.dto.TransferResponse;
-import com.minh.paymentsystem.transfer.service.TransferService;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.user.entity.UserStatus;
 import com.minh.paymentsystem.user.service.UserService;

@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.payment.service.impl;
+package com.minh.paymentsystem.payment.service;
 
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
@@ -7,8 +7,6 @@ import com.minh.paymentsystem.payment.dto.DepositResponse;
 import com.minh.paymentsystem.payment.entity.PaymentOrder;
 import com.minh.paymentsystem.payment.enums.PaymentOrderStatus;
 import com.minh.paymentsystem.payment.repository.PaymentOrderRepository;
-import com.minh.paymentsystem.payment.service.PaymentGatewayService;
-import com.minh.paymentsystem.payment.service.PaymentService;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.service.TransactionService;
@@ -115,7 +113,7 @@ public class PaymentServiceImpl implements PaymentService {
         } else {
             // 5. If failure: update status to FAILED, do not credit wallet
             paymentOrder.setStatus(PaymentOrderStatus.FAILED);
-            
+
             transactionService.createTransaction(
                     wallet,
                     TransactionType.DEPOSIT,

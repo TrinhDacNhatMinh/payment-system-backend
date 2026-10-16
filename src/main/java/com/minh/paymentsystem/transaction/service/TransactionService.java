@@ -16,7 +16,7 @@ import org.springframework.data.domain.Pageable;
 
 public interface TransactionService {
     Transaction createTransaction(Wallet wallet, TransactionType type, TransactionStatus status, BigDecimal amount, String referenceCode, String description);
-    
+
     PageResponse<TransactionResponse> getMyTransactions(Long userId, TransactionFilterRequest filter);
 
     PageResponse<TransactionResponse> getAllTransactions(AdminTransactionFilterRequest filter, Pageable pageable);

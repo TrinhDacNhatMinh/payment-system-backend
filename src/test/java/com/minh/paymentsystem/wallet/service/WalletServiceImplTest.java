@@ -6,7 +6,6 @@ import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.wallet.dto.WalletResponse;
 import com.minh.paymentsystem.wallet.entity.Wallet;
 import com.minh.paymentsystem.wallet.repository.WalletRepository;
-import com.minh.paymentsystem.wallet.service.impl.WalletServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

@@ -5,7 +5,6 @@ import com.minh.paymentsystem.auth.dto.LoginResponse;
 import com.minh.paymentsystem.auth.dto.RefreshTokenRequest;
 import com.minh.paymentsystem.auth.dto.RegisterRequest;
 import com.minh.paymentsystem.auth.security.JwtTokenProvider;
-import com.minh.paymentsystem.auth.service.impl.AuthServiceImpl;
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.user.dto.UserResponse;
@@ -29,8 +28,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -83,13 +80,12 @@ public class AuthServiceImplTest {
                 "test@example.com",
                 "password123",
                 "Test User",
-                "0123456789"
-        );
+                "0123456789");
 
         loginRequest = new LoginRequest("test@example.com", "password123");
-        
+
         refreshTokenRequest = new RefreshTokenRequest("valid-refresh-token");
-        
+
         validRefreshToken = RefreshToken.builder()
                 .id(1L)
                 .user(user)
@@ -109,7 +105,8 @@ public class AuthServiceImplTest {
             when(userService.existsByEmail(registerRequest.email())).thenReturn(true);
 
             // when & then
-            BusinessException exception = assertThrows(BusinessException.class, () -> authService.register(registerRequest));
+            BusinessException exception = assertThrows(BusinessException.class,
+                    () -> authService.register(registerRequest));
             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
 
@@ -129,7 +126,6 @@ public class AuthServiceImplTest {
         void register_emailAlreadyExists_doesNotCreateWallet() {
             // given
             when(userService.existsByEmail(registerRequest.email())).thenReturn(true);
-
 
             // when
             assertThrows(BusinessException.class, () -> authService.register(registerRequest));
@@ -225,7 +221,8 @@ public class AuthServiceImplTest {
         @Test
         void login_invalidCredentials_throwsBusinessException() {
             // given
-            when(userService.getUserByEmail(loginRequest.email())).thenThrow(new BusinessException(ErrorCode.INVALID_CREDENTIALS));
+            when(userService.getUserByEmail(loginRequest.email()))
+                    .thenThrow(new BusinessException(ErrorCode.INVALID_CREDENTIALS));
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> authService.login(loginRequest));
@@ -259,9 +256,9 @@ public class AuthServiceImplTest {
             // given
             when(userService.getUserByEmail(loginRequest.email())).thenReturn(user);
             when(passwordEncoder.matches(loginRequest.password(), user.getPassword())).thenReturn(true);
-            
-            
-            when(jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole())).thenReturn("new-access-token");
+
+            when(jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole()))
+                    .thenReturn("new-access-token");
             when(jwtTokenProvider.generateRefreshToken()).thenReturn("new-refresh-token");
             when(jwtTokenProvider.getAccessExpiration()).thenReturn(3600000L); // 1 hour
 
@@ -272,10 +269,10 @@ public class AuthServiceImplTest {
 
             // then
             verify(refreshTokenService, times(1)).revokeAllUserTokens(user);
-            
+
             verify(refreshTokenService, times(1)).saveToken(newTokenCaptor.capture());
             assertThat(newTokenCaptor.getValue().getToken()).isEqualTo("new-refresh-token");
-            
+
             assertThat(response.accessToken()).isEqualTo("new-access-token");
             assertThat(response.refreshToken()).isEqualTo("new-refresh-token");
         }
@@ -288,10 +285,12 @@ public class AuthServiceImplTest {
         @Test
         void refresh_tokenNotFound_throwsBusinessException() {
             // given
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken()))
+                    .thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
 
             // when & then
-            BusinessException ex = assertThrows(BusinessException.class, () -> authService.refresh(refreshTokenRequest));
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> authService.refresh(refreshTokenRequest));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
 
@@ -302,7 +301,8 @@ public class AuthServiceImplTest {
             when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
 
             // when & then
-            BusinessException ex = assertThrows(BusinessException.class, () -> authService.refresh(refreshTokenRequest));
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> authService.refresh(refreshTokenRequest));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_REVOKED);
         }
 
@@ -313,7 +313,8 @@ public class AuthServiceImplTest {
             when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
 
             // when & then
-            BusinessException ex = assertThrows(BusinessException.class, () -> authService.refresh(refreshTokenRequest));
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> authService.refresh(refreshTokenRequest));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_EXPIRED);
         }
 
@@ -321,7 +322,8 @@ public class AuthServiceImplTest {
         void refresh_validToken_returnsNewToken() {
             // given
             when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
-            when(jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole())).thenReturn("new-access-token");
+            when(jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole()))
+                    .thenReturn("new-access-token");
             when(jwtTokenProvider.getAccessExpiration()).thenReturn(3600000L);
 
             // when
@@ -340,7 +342,8 @@ public class AuthServiceImplTest {
         @Test
         void logout_tokenNotFound_throwsBusinessException() {
             // given
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken()))
+                    .thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> authService.logout(refreshTokenRequest));

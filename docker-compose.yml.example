@@ -7,18 +7,13 @@ services:
       - db
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/payment_db
-      SPRING_DATASOURCE_USERNAME: payment_user
-      SPRING_DATASOURCE_PASSWORD: payment_pass
-      JWT_SECRET: ${JWT_SECRET}
-      VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET}
-      VNPAY_TMN_CODE: ${VNPAY_TMN_CODE}
 
   db:
     image: postgres:16
     environment:
       POSTGRES_DB: payment_db
       POSTGRES_USER: payment_user
-      POSTGRES_PASSWORD: payment_pass
+      POSTGRES_PASSWORD: replace-with-your-db-password
     ports:
       - "5432:5432"
     volumes:
@@ -26,4 +21,3 @@ services:
 
 volumes:
   pg_data:
-

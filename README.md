@@ -22,11 +22,11 @@ A monolithic backend service (REST API) built with Spring Boot for a simple e-wa
 ## Tech Stack
 
 | Layer            | Technology                                  |
-| ---------------- | ------------------------------------------- |
+|------------------|---------------------------------------------|
 | Language         | Java 17                                     |
 | Framework        | Spring Boot 3.4.1                           |
 | Build Tool       | Maven                                       |
-| Database         | PostgreSQL 16                               |
+| Database         | PostgresSQL 16                              |
 | ORM              | Spring Data JPA (Hibernate)                 |
 | Security         | Spring Security + jjwt (0.12.6)             |
 | Payment Gateway  | VNPay Sandbox                               |
@@ -46,23 +46,33 @@ A monolithic backend service (REST API) built with Spring Boot for a simple e-wa
 
 ```bash
 git clone https://github.com/TrinhDacNhatMinh/payment-system-backend.git
+cd payment-system-backend
+cp src/main/resources/application.yaml.example src/main/resources/application.yaml
+cp docker-compose.yml.example docker-compose.yml
+# Fill in application.yaml and docker-compose.yml before starting.
 docker compose up -d --build
 ```
 
 ### Configuration
 
-Environment variables needed (set in `.env` based on `.env.example`):
-| Variable | Description | Example |
-|---|---|---|
-| `JWT_SECRET` | Base64 encoded secret for signing JWT | `your-secret-key-here` |
-| `VNPAY_TMN_CODE` | VNPay Sandbox Merchant Code | `your-vnpay-code` |
-| `VNPAY_HASH_SECRET` | VNPay Sandbox Hash Secret | `your-vnpay-secret` |
+Copy `src/main/resources/application.yaml.example` to `src/main/resources/application.yaml` and fill in the real database, JWT, and VNPay values. The real YAML is ignored by Git; commit only the example with placeholder values. JWT signing uses a raw UTF-8 secret of at least 32 bytes.
+
+Spring reads literal values from `application.yaml`. It does not import `.env` or require environment placeholders. Both IDE and Docker use this file. Keep the IDE working directory at the backend project root when running Maven commands.
+
+Copy `docker-compose.yml.example` to `docker-compose.yml` and fill in its literal PostgreSQL settings. Keep the database name, username, and password consistent with `application.yaml`. Compose only overrides the backend property `SPRING_DATASOURCE_URL` to use `db:5432` instead of `localhost`. Neither IDE nor Docker needs a `.env` file. The real Compose file is ignored by Git; commit only its example.
+
+The Dockerfile packages the local YAML into the JAR/image. Rebuild the image after changing this file, and do not publish an image containing private configuration. Someone cloning the repository must create their local YAML before building.
+
+`ddl-auto: create` and `create-drop` recreate tables and delete data. The example uses `update` for local development; use managed migrations and `validate` for deployed environments. Changing PostgreSQL credentials in Compose does not update users or passwords in an existing `pg_data` volume.
 
 ### Running
 
 ```bash
-# Run the application
+# Run the application locally with the project root as the working directory
 mvn spring-boot:run
+
+# Build and run the backend and PostgreSQL with Docker
+docker compose up -d --build
 
 # Run tests
 mvn test
@@ -73,7 +83,7 @@ mvn test
 **Swagger UI:** http://localhost:8080/swagger-ui.html
 
 | Method | Endpoint                          | Description                       | Auth  |
-| ------ | --------------------------------- | --------------------------------- | ----- |
+|--------|-----------------------------------|-----------------------------------|-------|
 | POST   | `/api/v1/auth/register`           | Register a new user               | None  |
 | POST   | `/api/v1/auth/login`              | Authenticate user and get tokens  | None  |
 | POST   | `/api/v1/auth/refresh`            | Refresh access token              | None  |

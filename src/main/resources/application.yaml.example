@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: payment-system
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:postgresql://localhost:5432/payment_db
+    username: payment_user
+    password: replace-with-your-db-password
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.minh.paymentsystem: INFO
+
+jwt:
+  secret: replace-with-a-random-secret-at-least-32-bytes-long
+  access-expiration: 1800000 # 30 mins
+  refresh-expiration: 604800000 # 7 days
+
+vnpay:
+  tmn-code: your-vnpay-code
+  hash-secret: your-vnpay-secret
+  url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+  return-url: http://localhost:8080/api/v1/payment/vnpay-return
+

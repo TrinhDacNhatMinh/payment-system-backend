@@ -35,6 +35,6 @@ build/
 ### Environment Variables & Secrets ###
 .env
 *.env
-
-# Ignore sensitive config files
-src/main/resources/application-dev.yaml
+src/main/resources/application.yaml
+src/test/resources/application.yaml
+docker-compose.yml

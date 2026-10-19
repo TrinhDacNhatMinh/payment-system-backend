@@ -1,6 +1,0 @@
-spring:
-  application:
-    name: payment-system
-  profiles:
-    active: dev
-

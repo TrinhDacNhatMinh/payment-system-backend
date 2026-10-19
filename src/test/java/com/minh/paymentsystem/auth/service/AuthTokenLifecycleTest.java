@@ -82,6 +82,7 @@ class AuthTokenLifecycleTest {
     private User createUser(String email) {
         return userRepository.save(User.builder()
                 .email(email)
+                .fullName("Test User")
                 .password(passwordEncoder.encode("password123"))
                 .role(Role.USER)
                 .status(UserStatus.ACTIVE)

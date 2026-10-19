@@ -82,6 +82,7 @@ class TransferBalanceTest {
     private User createUser(String email) {
         return userRepository.save(User.builder()
                 .email(email)
+                .fullName("Test User")
                 .password("unused-test-password")
                 .role(Role.USER)
                 .status(UserStatus.ACTIVE)

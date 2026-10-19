@@ -7,58 +7,46 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.Check;
 
+import com.minh.paymentsystem.common.entity.AuditableEntity;
 import com.minh.paymentsystem.payment.enums.PaymentOrderStatus;
 import com.minh.paymentsystem.user.entity.User;
 
 @Entity
 @Table(name = "payment_orders")
+@Check(name = "ck_payment_orders_amount_positive", constraints = "amount > 0")
 @Getter
 @Setter
 @NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class PaymentOrder {
+@SuperBuilder
+public class PaymentOrder extends AuditableEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(unique = true, nullable = false)
+    @Column(name = "order_id", nullable = false, unique = true)
     private String orderId;
 
-    @Column(precision = 18, scale = 2, nullable = false)
+    @Column(name = "amount", nullable = false, precision = 18, scale = 2)
     private BigDecimal amount;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(name = "status", nullable = false)
     private PaymentOrderStatus status;
 
+    @Column(name = "vnp_transaction_no")
     private String vnpTransactionNo;
 
+    @Column(name = "paid_at")
     private LocalDateTime paidAt;
-
-    @CreationTimestamp
-    private LocalDateTime createdAt;
-
-    @UpdateTimestamp
-    private LocalDateTime updatedAt;
 }

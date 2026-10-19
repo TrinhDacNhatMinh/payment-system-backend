@@ -1,12 +1,11 @@
 package com.minh.paymentsystem.transfer.dto;
 
-import io.swagger.v3.oas.annotations.media.Schema;
-
+import java.math.BigDecimal;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
-import java.math.BigDecimal;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 public record TransferRequest(
         @Schema(description = "Recipient email", example = "recipient@example.com")
@@ -19,6 +18,5 @@ public record TransferRequest(
         BigDecimal amount,
 
         @Schema(description = "Transaction description", example = "Transfer for lunch")
-        String description
-) {
+        String description) {
 }

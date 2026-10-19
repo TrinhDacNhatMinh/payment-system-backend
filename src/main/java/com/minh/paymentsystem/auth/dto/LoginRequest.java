@@ -13,6 +13,5 @@ public record LoginRequest(
 
         @Schema(description = "User's password", example = "Password@123")
         @NotBlank(message = "Password is required")
-        String password
-) {
+        String password) {
 }

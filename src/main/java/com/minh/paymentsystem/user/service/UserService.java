@@ -1,9 +1,10 @@
 package com.minh.paymentsystem.user.service;
 
+import org.springframework.data.domain.Pageable;
+
 import com.minh.paymentsystem.common.dto.PageResponse;
 import com.minh.paymentsystem.user.dto.UserResponse;
 import com.minh.paymentsystem.user.entity.User;
-import org.springframework.data.domain.Pageable;
 
 public interface UserService {
     void lockUser(Long userId);

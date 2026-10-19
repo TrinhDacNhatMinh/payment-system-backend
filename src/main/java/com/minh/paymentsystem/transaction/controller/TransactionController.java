@@ -1,11 +1,7 @@
 package com.minh.paymentsystem.transaction.controller;
 
-import com.minh.paymentsystem.auth.security.CustomUserDetails;
-import com.minh.paymentsystem.common.dto.PageResponse;
-import com.minh.paymentsystem.common.response.BaseResponse;
-import com.minh.paymentsystem.transaction.dto.TransactionFilterRequest;
-import com.minh.paymentsystem.transaction.dto.TransactionResponse;
-import com.minh.paymentsystem.transaction.service.TransactionService;
+import jakarta.validation.Valid;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -19,10 +15,17 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.minh.paymentsystem.auth.security.CustomUserDetails;
+import com.minh.paymentsystem.common.dto.PageResponse;
+import com.minh.paymentsystem.common.response.BaseResponse;
+import com.minh.paymentsystem.transaction.dto.TransactionFilterRequest;
+import com.minh.paymentsystem.transaction.dto.TransactionResponse;
+import com.minh.paymentsystem.transaction.service.TransactionService;
+
 @RestController
 @RequestMapping("/api/v1/transactions")
-@RequiredArgsConstructor
 @Tag(name = "Transaction", description = "Transaction History APIs")
+@RequiredArgsConstructor
 public class TransactionController {
 
     private final TransactionService transactionService;
@@ -36,10 +39,12 @@ public class TransactionController {
     })
     @GetMapping
     public ResponseEntity<BaseResponse<PageResponse<TransactionResponse>>> getMyTransactions(
-            @ModelAttribute TransactionFilterRequest filter,
+            @ModelAttribute @Valid TransactionFilterRequest filter,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
 
         PageResponse<TransactionResponse> response = transactionService.getMyTransactions(userDetails.getUserId(), filter);
-        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(response));
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(response));
     }
 }

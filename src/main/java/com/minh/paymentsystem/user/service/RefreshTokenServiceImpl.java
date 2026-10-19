@@ -1,20 +1,21 @@
 package com.minh.paymentsystem.user.service;
 
-import com.minh.paymentsystem.common.exception.BusinessException;
-import com.minh.paymentsystem.common.exception.ErrorCode;
-import com.minh.paymentsystem.user.entity.RefreshToken;
-import com.minh.paymentsystem.user.entity.User;
-import com.minh.paymentsystem.user.repository.RefreshTokenRepository;
+import java.time.Instant;
+import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-import java.util.List;
+import com.minh.paymentsystem.common.exception.BusinessException;
+import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.user.entity.RefreshToken;
+import com.minh.paymentsystem.user.entity.User;
+import com.minh.paymentsystem.user.repository.RefreshTokenRepository;
 
-@Slf4j
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class RefreshTokenServiceImpl implements RefreshTokenService {
 
@@ -44,7 +45,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public void cleanUpTokens(Instant threshold) {
-        log.info("Cleaning up revoked or expired refresh tokens older than {}", threshold);
+        log.debug("Cleaning up revoked or expired refresh tokens older than {}", threshold);
         refreshTokenRepository.deleteExpiredTokensOlderThan(threshold);
     }
 }

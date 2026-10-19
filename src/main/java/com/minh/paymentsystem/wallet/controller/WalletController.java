@@ -1,9 +1,5 @@
 package com.minh.paymentsystem.wallet.controller;
 
-import com.minh.paymentsystem.auth.security.CustomUserDetails;
-import com.minh.paymentsystem.common.response.BaseResponse;
-import com.minh.paymentsystem.wallet.dto.WalletResponse;
-import com.minh.paymentsystem.wallet.service.WalletService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -16,10 +12,15 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.minh.paymentsystem.auth.security.CustomUserDetails;
+import com.minh.paymentsystem.common.response.BaseResponse;
+import com.minh.paymentsystem.wallet.dto.WalletResponse;
+import com.minh.paymentsystem.wallet.service.WalletService;
+
 @RestController
 @RequestMapping("/api/v1/wallet")
-@RequiredArgsConstructor
 @Tag(name = "Wallet", description = "Wallet API endpoints")
+@RequiredArgsConstructor
 public class WalletController {
 
     private final WalletService walletService;
@@ -34,6 +35,8 @@ public class WalletController {
     public ResponseEntity<BaseResponse<WalletResponse>> getMyWallet(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         WalletResponse wallet = walletService.getMyWallet(userDetails.getUserId());
-        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(wallet));
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(wallet));
     }
 }

@@ -1,8 +1,8 @@
 package com.minh.paymentsystem.common.dto;
 
-import io.swagger.v3.oas.annotations.media.Schema;
-
 import java.util.List;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 
 public record PageResponse<T>(
         @Schema(description = "List of items")
@@ -18,6 +18,5 @@ public record PageResponse<T>(
         long totalElements,
 
         @Schema(description = "Total number of pages", example = "10")
-        int totalPages
-) {}
-
+        int totalPages) {
+}

@@ -1,9 +1,8 @@
 package com.minh.paymentsystem.payment.controller;
 
-import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
-import com.minh.paymentsystem.payment.service.PaymentService;
+import java.util.Map;
+
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,12 +14,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
+import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
+import com.minh.paymentsystem.payment.service.PaymentService;
 
 @RestController
 @RequestMapping("/api/v1/payment")
-@RequiredArgsConstructor
 @Tag(name = "Payment Webhook", description = "Endpoints for VNPay IPN and Return URLs")
+@RequiredArgsConstructor
 public class PaymentWebhookController {
 
     private final PaymentService paymentService;
@@ -31,9 +31,11 @@ public class PaymentWebhookController {
             @ApiResponse(responseCode = "404", description = "Payment order or wallet not found")
     })
     @GetMapping("/vnpay-webhook")
-    public ResponseEntity<VnpayCallbackResponse> handleVnpayWebhook(@Parameter(description = "VNPay callback parameters") @RequestParam Map<String, String> params) {
+    public ResponseEntity<VnpayCallbackResponse> handleVnpayWebhook(@RequestParam Map<String, String> params) {
         VnpayCallbackResponse response = paymentService.handleCallback(params);
-        return ResponseEntity.status(HttpStatus.OK).body(response);
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(response);
     }
 
     @Operation(summary = "VNPay Return URL", description = "Redirect URL for users after completing payment on VNPay")
@@ -42,8 +44,10 @@ public class PaymentWebhookController {
             @ApiResponse(responseCode = "404", description = "Payment order not found")
     })
     @GetMapping("/vnpay-return")
-    public ResponseEntity<String> handleVnpayReturn(@Parameter(description = "VNPay callback parameters") @RequestParam Map<String, String> params) {
+    public ResponseEntity<String> handleVnpayReturn(@RequestParam Map<String, String> params) {
         String result = paymentService.processReturn(params);
-        return ResponseEntity.status(HttpStatus.OK).body(result);
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(result);
     }
 }

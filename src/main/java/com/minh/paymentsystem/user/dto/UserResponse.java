@@ -10,7 +10,7 @@ public record UserResponse(
         @Schema(description = "ID", example = "1")
         Long id,
 
-        @Schema(description = "Filter by user email", example = "user@example.com")
+        @Schema(description = "User's email address", example = "user@example.com")
         String email,
 
         @Schema(description = "Full name", example = "Nguyen Van A")
@@ -20,15 +20,13 @@ public record UserResponse(
         Role role,
 
         @Schema(description = "User status", example = "ACTIVE")
-        UserStatus status
-) {
+        UserStatus status) {
     public static UserResponse from(User user) {
         return new UserResponse(
                 user.getId(),
                 user.getEmail(),
                 user.getFullName(),
                 user.getRole(),
-                user.getStatus()
-        );
+                user.getStatus());
     }
 }

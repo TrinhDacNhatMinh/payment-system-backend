@@ -1,17 +1,11 @@
 package com.minh.paymentsystem.auth.controller;
 
-import com.minh.paymentsystem.auth.dto.LoginRequest;
-import com.minh.paymentsystem.auth.dto.LoginResponse;
-import com.minh.paymentsystem.auth.dto.RefreshTokenRequest;
-import com.minh.paymentsystem.auth.dto.RegisterRequest;
-import com.minh.paymentsystem.auth.service.AuthService;
-import com.minh.paymentsystem.common.response.BaseResponse;
-import com.minh.paymentsystem.user.dto.UserResponse;
+import jakarta.validation.Valid;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,10 +14,18 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.minh.paymentsystem.auth.dto.AuthResponse;
+import com.minh.paymentsystem.auth.dto.LoginRequest;
+import com.minh.paymentsystem.auth.dto.RefreshTokenRequest;
+import com.minh.paymentsystem.auth.dto.RegisterRequest;
+import com.minh.paymentsystem.auth.service.AuthService;
+import com.minh.paymentsystem.common.response.BaseResponse;
+import com.minh.paymentsystem.user.dto.UserResponse;
+
 @RestController
 @RequestMapping("/api/v1/auth")
-@RequiredArgsConstructor
 @Tag(name = "Auth", description = "Authentication and Authorization API endpoints")
+@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
@@ -35,11 +37,14 @@ public class AuthController {
             @ApiResponse(responseCode = "409", description = "Email already exists")
     })
     @PostMapping("/register")
-    public ResponseEntity<BaseResponse<UserResponse>> register(@Valid @RequestBody RegisterRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(BaseResponse.success(authService.register(request)));
+    public ResponseEntity<BaseResponse<UserResponse>> register(@RequestBody @Valid RegisterRequest request) {
+        UserResponse response = authService.register(request);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(BaseResponse.success(response));
     }
 
-    @Operation(summary = "Login", description = "Authenticates user and returns JWT access and refresh tokens. Note: This action will log out all other active sessions (Single-device policy).")
+    @Operation(summary = "Login", description = "Authenticates the user, revokes all existing refresh tokens, and returns a new access and refresh token pair. Existing access tokens remain valid until expiration.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully authenticated"),
             @ApiResponse(responseCode = "400", description = "Validation error"),
@@ -47,31 +52,41 @@ public class AuthController {
             @ApiResponse(responseCode = "403", description = "Account is locked")
     })
     @PostMapping("/login")
-    public ResponseEntity<BaseResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(authService.login(request)));
+    public ResponseEntity<BaseResponse<AuthResponse>> login(@RequestBody @Valid LoginRequest request) {
+        AuthResponse response = authService.login(request);
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(response));
     }
 
-    @Operation(summary = "Refresh token", description = "Generates a new access token using a valid refresh token.")
+    @Operation(summary = "Refresh token", description = "Revokes all existing refresh tokens and issues a new access and refresh token pair using a valid refresh token. Locked accounts cannot refresh tokens.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Token refreshed successfully"),
             @ApiResponse(responseCode = "400", description = "Validation error"),
             @ApiResponse(responseCode = "401", description = "Refresh token expired or revoked"),
+            @ApiResponse(responseCode = "403", description = "Account is locked"),
             @ApiResponse(responseCode = "404", description = "Refresh token not found")
     })
     @PostMapping("/refresh")
-    public ResponseEntity<BaseResponse<LoginResponse>> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(authService.refresh(request)));
+    public ResponseEntity<BaseResponse<AuthResponse>> refresh(@RequestBody @Valid RefreshTokenRequest request) {
+        AuthResponse response = authService.refresh(request);
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(response));
     }
 
-    @Operation(summary = "Logout", description = "Revokes the provided refresh token.")
+    @Operation(summary = "Logout", description = "Revokes all refresh tokens for the user. The provided refresh token may be expired but must exist and must not be revoked. Existing access tokens remain valid until expiration.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully logged out"),
             @ApiResponse(responseCode = "400", description = "Validation error"),
+            @ApiResponse(responseCode = "401", description = "Refresh token revoked"),
             @ApiResponse(responseCode = "404", description = "Refresh token not found")
     })
     @PostMapping("/logout")
-    public ResponseEntity<BaseResponse<Void>> logout(@Valid @RequestBody RefreshTokenRequest request) {
+    public ResponseEntity<BaseResponse<Void>> logout(@RequestBody @Valid RefreshTokenRequest request) {
         authService.logout(request);
-        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(null));
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(null));
     }
 }

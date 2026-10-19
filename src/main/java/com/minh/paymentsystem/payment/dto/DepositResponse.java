@@ -7,6 +7,5 @@ public record DepositResponse(
         String orderId,
 
         @Schema(description = "URL to redirect user for payment", example = "https://sandbox.vnpayment.vn/...")
-        String paymentUrl
-) {
+        String paymentUrl) {
 }

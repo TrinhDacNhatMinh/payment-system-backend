@@ -1,10 +1,11 @@
 package com.minh.paymentsystem.user.service;
 
-import com.minh.paymentsystem.common.exception.BusinessException;
-import com.minh.paymentsystem.common.exception.ErrorCode;
-import com.minh.paymentsystem.user.entity.User;
-import com.minh.paymentsystem.user.entity.UserStatus;
-import com.minh.paymentsystem.user.repository.UserRepository;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.*;
+
+import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -15,11 +16,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.*;
+import com.minh.paymentsystem.common.exception.BusinessException;
+import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.user.entity.User;
+import com.minh.paymentsystem.user.entity.UserStatus;
+import com.minh.paymentsystem.user.repository.UserRepository;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceImplTest {

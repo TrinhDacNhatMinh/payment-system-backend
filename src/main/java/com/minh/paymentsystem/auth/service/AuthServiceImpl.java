@@ -1,7 +1,15 @@
 package com.minh.paymentsystem.auth.service;
 
+import java.time.Instant;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.minh.paymentsystem.auth.dto.AuthResponse;
 import com.minh.paymentsystem.auth.dto.LoginRequest;
-import com.minh.paymentsystem.auth.dto.LoginResponse;
 import com.minh.paymentsystem.auth.dto.RefreshTokenRequest;
 import com.minh.paymentsystem.auth.dto.RegisterRequest;
 import com.minh.paymentsystem.auth.security.JwtTokenProvider;
@@ -15,16 +23,9 @@ import com.minh.paymentsystem.user.entity.UserStatus;
 import com.minh.paymentsystem.user.service.RefreshTokenService;
 import com.minh.paymentsystem.user.service.UserService;
 import com.minh.paymentsystem.wallet.service.WalletService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-
-@Slf4j
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
@@ -37,14 +38,70 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public UserResponse register(RegisterRequest request) {
-        log.info("Registering new user with email: {}", request.email());
+        log.debug("Registering new user");
+        validateRegister(request);
+
+        User user = buildRegisteredUser(request);
+        userService.createUser(user);
+        walletService.createWalletForUser(user);
+
+        log.info("Registration processed: userId={}", user.getId());
+        return UserResponse.from(user);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse login(LoginRequest request) {
+        log.debug("Processing login request");
+        User user = authenticateUser(request);
+
+        refreshTokenService.revokeAllUserTokens(user);
+
+        AuthResponse response = issueAuthTokens(user);
+        log.info("Login processed: userId={}", user.getId());
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse refresh(RefreshTokenRequest request) {
+        log.debug("Processing refresh token request");
+        RefreshToken token = validateRefreshToken(request);
+
+        User user = token.getUser();
+        if (user.getStatus() == UserStatus.LOCKED) {
+            throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
+        }
+        refreshTokenService.revokeAllUserTokens(user);
+
+        AuthResponse response = issueAuthTokens(user);
+        log.info("Token refresh processed: userId={}", user.getId());
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public void logout(RefreshTokenRequest request) {
+        log.debug("Processing logout request");
+        RefreshToken token = refreshTokenService.getToken(request.refreshToken());
+        if (token.isRevoked()) {
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_REVOKED);
+        }
+        User user = token.getUser();
+        refreshTokenService.revokeAllUserTokens(user);
+        log.info("Logout processed: userId={}", user.getId());
+    }
+
+    private void validateRegister(RegisterRequest request) {
         if (userService.existsByEmail(request.email())) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
+    }
 
+    private User buildRegisteredUser(RegisterRequest request) {
         String encodedPassword = passwordEncoder.encode(request.password());
 
-        User user = User.builder()
+        return User.builder()
                 .email(request.email())
                 .password(encodedPassword)
                 .fullName(request.fullName())
@@ -52,54 +109,31 @@ public class AuthServiceImpl implements AuthService {
                 .role(Role.USER)
                 .status(UserStatus.ACTIVE)
                 .build();
-
-        userService.createUser(user);
-        walletService.createWalletForUser(user);
-
-        return UserResponse.from(user);
     }
 
-    @Override
-    @Transactional
-    public LoginResponse login(LoginRequest request) {
-        log.info("Processing login for email: {}", request.email());
-        User user = userService.getUserByEmail(request.email());
-
-        if (user.getStatus() == UserStatus.LOCKED) {
-            throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
+    private User authenticateUser(LoginRequest request) {
+        User user;
+        try {
+            user = userService.getUserByEmail(request.email());
+        } catch (BusinessException e) {
+            if (e.getErrorCode() == ErrorCode.USER_NOT_FOUND) {
+                throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, e);
+            }
+            throw e;
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
 
-        refreshTokenService.revokeAllUserTokens(user);
-
-        String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
-        String refreshTokenString = jwtTokenProvider.generateRefreshToken();
-
-        RefreshToken refreshToken = RefreshToken.builder()
-                .user(user)
-                .token(refreshTokenString)
-                .expiresAt(Instant.now().plusMillis(jwtTokenProvider.getRefreshExpiration()))
-                .revoked(false)
-                .build();
-
-        refreshTokenService.saveToken(refreshToken);
-
-        return new LoginResponse(
-                accessToken,
-                refreshTokenString,
-                "Bearer",
-                jwtTokenProvider.getAccessExpiration() / 1000);
+        if (user.getStatus() == UserStatus.LOCKED) {
+            throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
+        }
+        return user;
     }
 
-    @Override
-    @Transactional
-    public LoginResponse refresh(RefreshTokenRequest request) {
-        log.info("Processing refresh token request");
+    private RefreshToken validateRefreshToken(RefreshTokenRequest request) {
         RefreshToken token = refreshTokenService.getToken(request.refreshToken());
-
         if (token.isRevoked()) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_REVOKED);
         }
@@ -107,24 +141,29 @@ public class AuthServiceImpl implements AuthService {
         if (token.getExpiresAt().isBefore(Instant.now())) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_EXPIRED);
         }
+        return token;
+    }
 
-        User user = token.getUser();
-        String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
+    private AuthResponse issueAuthTokens(User user) {
+        String accessToken = jwtTokenProvider.generateAccessToken(user);
 
-        return new LoginResponse(
+        String refreshToken = jwtTokenProvider.generateRefreshToken();
+        saveRefreshToken(user, refreshToken);
+
+        return new AuthResponse(
                 accessToken,
-                token.getToken(),
+                refreshToken,
                 "Bearer",
                 jwtTokenProvider.getAccessExpiration() / 1000);
     }
 
-    @Override
-    @Transactional
-    public void logout(RefreshTokenRequest request) {
-        log.info("Processing logout request");
-        RefreshToken token = refreshTokenService.getToken(request.refreshToken());
-
-        token.setRevoked(true);
-        refreshTokenService.saveToken(token);
+    private void saveRefreshToken(User user, String token) {
+        RefreshToken refreshToken = RefreshToken.builder()
+                .user(user)
+                .token(token)
+                .expiresAt(Instant.now().plusMillis(jwtTokenProvider.getRefreshExpiration()))
+                .revoked(false)
+                .build();
+        refreshTokenService.saveToken(refreshToken);
     }
 }

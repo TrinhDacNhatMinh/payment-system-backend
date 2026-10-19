@@ -28,6 +28,9 @@
 	</scm>
 	<properties>
 		<java.version>17</java.version>
+		<spotless.version>3.10.4</spotless.version>
+		<eclipse.formatter.version>4.32</eclipse.formatter.version>
+		<groovy.formatter.version>3.0.24</groovy.formatter.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -102,6 +105,49 @@
 
 	<build>
 		<plugins>
+			<plugin>
+				<groupId>com.diffplug.spotless</groupId>
+				<artifactId>spotless-maven-plugin</artifactId>
+				<version>${spotless.version}</version>
+				<configuration>
+					<encoding>UTF-8</encoding>
+					<upToDateChecking>
+						<enabled>false</enabled>
+					</upToDateChecking>
+					<lineEndings>UNIX</lineEndings>
+					<java>
+						<includes>
+							<include>src/main/java/**/*.java</include>
+							<include>src/test/java/**/*.java</include>
+						</includes>
+						<eclipse>
+							<version>${eclipse.formatter.version}</version>
+							<file>${project.basedir}/config/spotless/eclipse-java-formatter.xml</file>
+						</eclipse>
+						<jsr223>
+							<name>record-annotations</name>
+							<dependency>org.codehaus.groovy:groovy-jsr223:${groovy.formatter.version}</dependency>
+							<engine>groovy</engine>
+							<script><![CDATA[evaluate(new File($/${project.basedir}/config/spotless/record-annotations.groovy/$))]]></script>
+						</jsr223>
+						<removeUnusedImports/>
+						<importOrder>
+							<order>\#,java|javax|jakarta,,com.minh.paymentsystem</order>
+						</importOrder>
+						<trimTrailingWhitespace/>
+						<endWithNewline/>
+					</java>
+				</configuration>
+				<executions>
+					<execution>
+						<id>check-formatting</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>

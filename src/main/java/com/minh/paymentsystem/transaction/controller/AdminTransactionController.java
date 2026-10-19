@@ -1,18 +1,15 @@
 package com.minh.paymentsystem.transaction.controller;
 
-import com.minh.paymentsystem.common.dto.PageResponse;
-import com.minh.paymentsystem.common.response.BaseResponse;
-import com.minh.paymentsystem.transaction.dto.AdminTransactionFilterRequest;
-import com.minh.paymentsystem.transaction.dto.TransactionResponse;
-import com.minh.paymentsystem.transaction.enums.TransactionStatus;
-import com.minh.paymentsystem.transaction.enums.TransactionType;
-import com.minh.paymentsystem.transaction.service.TransactionService;
-import lombok.RequiredArgsConstructor;
+import java.time.LocalDateTime;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -25,12 +22,19 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
+import com.minh.paymentsystem.common.constants.PaginationConstants;
+import com.minh.paymentsystem.common.dto.PageResponse;
+import com.minh.paymentsystem.common.response.BaseResponse;
+import com.minh.paymentsystem.transaction.dto.AdminTransactionFilterRequest;
+import com.minh.paymentsystem.transaction.dto.TransactionResponse;
+import com.minh.paymentsystem.transaction.enums.TransactionStatus;
+import com.minh.paymentsystem.transaction.enums.TransactionType;
+import com.minh.paymentsystem.transaction.service.TransactionService;
 
 @RestController
 @RequestMapping("/api/v1/admin/transactions")
-@RequiredArgsConstructor
 @Tag(name = "Admin Transactions", description = "Admin API for monitoring all transactions")
+@RequiredArgsConstructor
 public class AdminTransactionController {
 
     private final TransactionService transactionService;
@@ -45,22 +49,22 @@ public class AdminTransactionController {
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BaseResponse<PageResponse<TransactionResponse>>> getAllTransactions(
-            @Parameter(description = "Filter by user ID") @RequestParam(required = false) Long userId,
-            @Parameter(description = "Filter by user email") @RequestParam(required = false) String email,
-            @Parameter(description = "Filter by transaction type") @RequestParam(required = false) TransactionType type,
-            @Parameter(description = "Filter by transaction status") @RequestParam(required = false) TransactionStatus status,
-            @Parameter(description = "Filter from date (ISO 8601)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
-            @Parameter(description = "Filter to date (ISO 8601)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
-            @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Number of items per page") @RequestParam(defaultValue = "10") int size
-    ) {
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) TransactionType type,
+            @RequestParam(required = false) TransactionStatus status,
+            @Parameter(description = "Inclusive lower bound for transaction creation time. ISO 8601 local date-time without an offset, compared directly with stored timestamps.", example = "2026-10-19T00:00:00") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
+            @Parameter(description = "Inclusive upper bound for transaction creation time. ISO 8601 local date-time without an offset, compared directly with stored timestamps.", example = "2026-10-20T00:00:00") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
+            @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") @Min(0) int page,
+            @Parameter(description = "Number of items per page (1-100)") @RequestParam(defaultValue = "10") @Min(1) @Max(PaginationConstants.MAX_SIZE) int size) {
         AdminTransactionFilterRequest filter = new AdminTransactionFilterRequest(
-                userId, email, type, status, fromDate, toDate
-        );
+                userId, email, type, status, fromDate, toDate);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         PageResponse<TransactionResponse> response = transactionService.getAllTransactions(filter, pageable);
 
-        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(response));
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(response));
     }
 }

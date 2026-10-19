@@ -1,10 +1,10 @@
 package com.minh.paymentsystem.payment.service;
 
+import java.util.Map;
+
 import com.minh.paymentsystem.payment.dto.DepositRequest;
 import com.minh.paymentsystem.payment.dto.DepositResponse;
 import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
-
-import java.util.Map;
 
 public interface PaymentService {
     DepositResponse createDepositOrder(Long userId, DepositRequest request, String ipAddress);

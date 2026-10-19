@@ -1,17 +1,17 @@
 package com.minh.paymentsystem.common.response;
 
+import java.time.Instant;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
-import java.time.Instant;
-
+@JsonInclude(JsonInclude.Include.NON_NULL)
 @Getter
 @Builder
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class BaseResponse<T> {
     private final boolean success;
     private final T data;
@@ -37,4 +37,3 @@ public class BaseResponse<T> {
                 .build();
     }
 }
-

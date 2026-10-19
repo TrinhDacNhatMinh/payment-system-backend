@@ -2,7 +2,7 @@ package com.minh.paymentsystem.auth.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-public record LoginResponse(
+public record AuthResponse(
         @Schema(description = "JWT Access Token for authentication", example = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
         String accessToken,
 
@@ -12,7 +12,6 @@ public record LoginResponse(
         @Schema(description = "Type of the token", example = "Bearer")
         String tokenType,
 
-        @Schema(description = "Access token expiration time in milliseconds", example = "3600000")
-        long expiresIn
-) {
+        @Schema(description = "Access token expiration time in seconds", example = "3600")
+        long expiresIn) {
 }

@@ -1,14 +1,15 @@
 package com.minh.paymentsystem.auth.security;
 
-import com.minh.paymentsystem.user.entity.User;
-import com.minh.paymentsystem.user.entity.UserStatus;
+import java.util.Collection;
+import java.util.Collections;
+
 import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.util.Collection;
-import java.util.Collections;
+import com.minh.paymentsystem.user.entity.User;
+import com.minh.paymentsystem.user.entity.UserStatus;
 
 @Getter
 public class CustomUserDetails implements UserDetails {

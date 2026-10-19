@@ -1,34 +1,33 @@
 package com.minh.paymentsystem.payment.service;
 
+import java.math.BigDecimal;
+import java.util.Map;
+import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.payment.dto.DepositRequest;
 import com.minh.paymentsystem.payment.dto.DepositResponse;
+import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
 import com.minh.paymentsystem.payment.entity.PaymentOrder;
 import com.minh.paymentsystem.payment.enums.PaymentOrderStatus;
 import com.minh.paymentsystem.payment.repository.PaymentOrderRepository;
+import com.minh.paymentsystem.transaction.dto.CreateTransactionCommand;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.service.TransactionService;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.user.service.UserService;
 import com.minh.paymentsystem.wallet.entity.Wallet;
-
 import com.minh.paymentsystem.wallet.service.WalletService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.util.UUID;
-
-import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
-
-import java.util.Map;
-
-@Slf4j
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class PaymentServiceImpl implements PaymentService {
 
@@ -44,52 +43,34 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public DepositResponse createDepositOrder(Long userId, DepositRequest request, String ipAddress) {
-        log.info("Creating deposit order for user id={} with amount={}", userId, request.amount());
+        log.debug("Creating deposit order for user id={} with amount={}", userId, request.amount());
 
-        // 1. Validate amount
-        if (request.amount().compareTo(MIN_AMOUNT) < 0 || request.amount().compareTo(MAX_AMOUNT) > 0) {
-            throw new BusinessException(ErrorCode.AMOUNT_OUT_OF_RANGE);
-        }
-
+        validateDepositAmount(request.amount());
         User user = userService.getUserById(userId);
 
-        // 2. Generate unique orderId
         String orderId = "VNPAY_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
-
-        // 3. Create PaymentOrder with status PENDING
-        PaymentOrder paymentOrder = PaymentOrder.builder()
-                .user(user)
-                .orderId(orderId)
-                .amount(request.amount())
-                .status(PaymentOrderStatus.PENDING)
-                .build();
-
-        paymentOrderRepository.save(paymentOrder);
-
-        // 4. Call paymentGatewayService.buildPaymentUrl()
+        savePendingOrder(user, orderId, request.amount());
         String paymentUrl = paymentGatewayService.buildPaymentUrl(orderId, request.amount(), ipAddress);
 
-        // 5. Return DepositResponse
+        log.info("Deposit order prepared: orderId={}, userId={}", orderId, userId);
         return new DepositResponse(orderId, paymentUrl);
     }
 
     @Override
     @Transactional
     public VnpayCallbackResponse handleCallback(Map<String, String> params) {
-        log.info("Received VNPay IPN webhook: {}", params);
-        // 1. Verify checksum
+        log.debug("Received VNPay IPN webhook");
         if (!paymentGatewayService.verifyChecksum(params)) {
             return new VnpayCallbackResponse("97", "Invalid Checksum");
         }
 
-        // 2. Find PaymentOrder by vnp_TxnRef
         String orderId = params.get("vnp_TxnRef");
-        PaymentOrder paymentOrder = paymentOrderRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_ORDER_NOT_FOUND));
+        PaymentOrder paymentOrder = getPaymentOrder(orderId);
 
-        // 3. Idempotency check
+        log.debug("Verified VNPay IPN webhook for order={}", paymentOrder.getOrderId());
+
         if (paymentOrder.getStatus() != PaymentOrderStatus.PENDING) {
-            log.warn("Webhook Idempotency: Order {} already processed with status {}", orderId, paymentOrder.getStatus());
+            log.info("Webhook Idempotency: Order {} already processed with status {}", paymentOrder.getOrderId(), paymentOrder.getStatus());
             return new VnpayCallbackResponse("02", "Order already confirmed");
         }
 
@@ -97,56 +78,79 @@ public class PaymentServiceImpl implements PaymentService {
         Wallet wallet = walletService.getWalletByUserId(paymentOrder.getUser().getId());
 
         if ("00".equals(vnpResponseCode)) {
-            // 4. If vnp_ResponseCode == "00": success, credit wallet, create Transaction
-            paymentOrder.setStatus(PaymentOrderStatus.SUCCESS);
-            walletService.credit(wallet.getId(), paymentOrder.getAmount());
-
-            transactionService.createTransaction(
-                    wallet,
-                    TransactionType.DEPOSIT,
-                    TransactionStatus.SUCCESS,
-                    paymentOrder.getAmount(),
-                    orderId,
-                    "VNPay deposit successful"
-            );
-
+            completeDeposit(paymentOrder, wallet, orderId);
         } else {
-            // 5. If failure: update status to FAILED, do not credit wallet
-            paymentOrder.setStatus(PaymentOrderStatus.FAILED);
-
-            transactionService.createTransaction(
-                    wallet,
-                    TransactionType.DEPOSIT,
-                    TransactionStatus.FAILED,
-                    paymentOrder.getAmount(),
-                    orderId,
-                    "VNPay deposit failed"
-            );
+            failDeposit(paymentOrder, wallet, orderId);
         }
+
+        log.info("Deposit callback processed: orderId={}, status={}", paymentOrder.getOrderId(), paymentOrder.getStatus());
 
         // Return VnpayCallbackResponse matching VNPay requirements ({"RspCode": "00", "Message": "Confirm Success"})
         return new VnpayCallbackResponse("00", "Confirm Success");
     }
 
     @Override
+    @Transactional(readOnly = true)
     public String processReturn(Map<String, String> params) {
-        log.info("Received VNPay return redirect: {}", params);
-        // 1. Verify checksum
+        log.debug("Received VNPay return redirect");
         if (!paymentGatewayService.verifyChecksum(params)) {
             return "Invalid checksum. Payment verification failed.";
         }
 
-        // 2. Find PaymentOrder
         String orderId = params.get("vnp_TxnRef");
-        PaymentOrder paymentOrder = paymentOrderRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_ORDER_NOT_FOUND));
+        PaymentOrder paymentOrder = getPaymentOrder(orderId);
 
-        // 3. Return success/fail message
+        log.debug("Verified VNPay return redirect for order={}", paymentOrder.getOrderId());
+
         String vnpResponseCode = params.get("vnp_ResponseCode");
         if ("00".equals(vnpResponseCode)) {
             return "Payment successful for order: " + orderId;
         } else {
             return "Payment failed for order: " + orderId;
         }
+    }
+
+    private void validateDepositAmount(BigDecimal amount) {
+        if (amount.compareTo(MIN_AMOUNT) < 0 || amount.compareTo(MAX_AMOUNT) > 0) {
+            throw new BusinessException(ErrorCode.AMOUNT_OUT_OF_RANGE);
+        }
+    }
+
+    private void savePendingOrder(User user, String orderId, BigDecimal amount) {
+        PaymentOrder paymentOrder = PaymentOrder.builder()
+                .user(user)
+                .orderId(orderId)
+                .amount(amount)
+                .status(PaymentOrderStatus.PENDING)
+                .build();
+        paymentOrderRepository.save(paymentOrder);
+    }
+
+    private PaymentOrder getPaymentOrder(String orderId) {
+        return paymentOrderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_ORDER_NOT_FOUND));
+    }
+
+    private void completeDeposit(PaymentOrder paymentOrder, Wallet wallet, String orderId) {
+        paymentOrder.setStatus(PaymentOrderStatus.SUCCESS);
+        walletService.credit(wallet.getId(), paymentOrder.getAmount());
+        transactionService.createTransaction(new CreateTransactionCommand(
+                wallet,
+                TransactionType.DEPOSIT,
+                TransactionStatus.SUCCESS,
+                paymentOrder.getAmount(),
+                orderId,
+                "VNPay deposit successful"));
+    }
+
+    private void failDeposit(PaymentOrder paymentOrder, Wallet wallet, String orderId) {
+        paymentOrder.setStatus(PaymentOrderStatus.FAILED);
+        transactionService.createTransaction(new CreateTransactionCommand(
+                wallet,
+                TransactionType.DEPOSIT,
+                TransactionStatus.FAILED,
+                paymentOrder.getAmount(),
+                orderId,
+                "VNPay deposit failed"));
     }
 }

@@ -1,21 +1,15 @@
 package com.minh.paymentsystem.payment.service;
 
-import com.minh.paymentsystem.common.exception.BusinessException;
-import com.minh.paymentsystem.common.exception.ErrorCode;
-import com.minh.paymentsystem.payment.dto.DepositRequest;
-import com.minh.paymentsystem.payment.dto.DepositResponse;
-import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
-import com.minh.paymentsystem.payment.entity.PaymentOrder;
-import com.minh.paymentsystem.payment.enums.PaymentOrderStatus;
-import com.minh.paymentsystem.payment.repository.PaymentOrderRepository;
-import com.minh.paymentsystem.transaction.enums.TransactionStatus;
-import com.minh.paymentsystem.transaction.enums.TransactionType;
-import com.minh.paymentsystem.transaction.service.TransactionService;
-import com.minh.paymentsystem.user.entity.User;
-import com.minh.paymentsystem.user.service.UserService;
-import com.minh.paymentsystem.wallet.entity.Wallet;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
-import com.minh.paymentsystem.wallet.service.WalletService;
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -26,15 +20,22 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import com.minh.paymentsystem.common.exception.BusinessException;
+import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.payment.dto.DepositRequest;
+import com.minh.paymentsystem.payment.dto.DepositResponse;
+import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
+import com.minh.paymentsystem.payment.entity.PaymentOrder;
+import com.minh.paymentsystem.payment.enums.PaymentOrderStatus;
+import com.minh.paymentsystem.payment.repository.PaymentOrderRepository;
+import com.minh.paymentsystem.transaction.dto.CreateTransactionCommand;
+import com.minh.paymentsystem.transaction.enums.TransactionStatus;
+import com.minh.paymentsystem.transaction.enums.TransactionType;
+import com.minh.paymentsystem.transaction.service.TransactionService;
+import com.minh.paymentsystem.user.entity.User;
+import com.minh.paymentsystem.user.service.UserService;
+import com.minh.paymentsystem.wallet.entity.Wallet;
+import com.minh.paymentsystem.wallet.service.WalletService;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceImplTest {
@@ -64,8 +65,15 @@ class PaymentServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        testUser = User.builder().id(1L).email("test@example.com").build();
-        testWallet = Wallet.builder().id(10L).user(testUser).balance(new BigDecimal("100000")).build();
+        testUser = User.builder()
+                .id(1L)
+                .email("test@example.com")
+                .build();
+        testWallet = Wallet.builder()
+                .id(10L)
+                .user(testUser)
+                .balance(new BigDecimal("100000"))
+                .build();
 
         pendingOrder = PaymentOrder.builder()
                 .id(100L)
@@ -77,6 +85,50 @@ class PaymentServiceImplTest {
 
         callbackParams = new HashMap<>();
         callbackParams.put("vnp_TxnRef", "VNPAY_123");
+    }
+
+    @Test
+    void shouldRejectUnverifiedReturnWithoutLookingUpOrder() {
+        when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(false);
+
+        assertThat(paymentService.processReturn(callbackParams)).isEqualTo("Invalid checksum. Payment verification failed.");
+
+        verifyNoInteractions(paymentOrderRepository, walletService, transactionService);
+    }
+
+    @Test
+    void shouldKeepMissingOrderErrorForVerifiedReturn() {
+        when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
+        when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.empty());
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> paymentService.processReturn(callbackParams));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_ORDER_NOT_FOUND);
+        verifyNoInteractions(walletService, transactionService);
+    }
+
+    @Test
+    void shouldReturnSuccessfulPaymentMessageWithoutUpdatingWallet() {
+        callbackParams.put("vnp_ResponseCode", "00");
+        when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
+        when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
+
+        assertThat(paymentService.processReturn(callbackParams)).isEqualTo("Payment successful for order: VNPAY_123");
+
+        verifyNoInteractions(walletService, transactionService);
+        assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.PENDING);
+    }
+
+    @Test
+    void shouldReturnFailedPaymentMessageWithoutUpdatingWallet() {
+        callbackParams.put("vnp_ResponseCode", "24");
+        when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
+        when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
+
+        assertThat(paymentService.processReturn(callbackParams)).isEqualTo("Payment failed for order: VNPAY_123");
+
+        verifyNoInteractions(walletService, transactionService);
+        assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.PENDING);
     }
 
     @Nested
@@ -161,7 +213,7 @@ class PaymentServiceImplTest {
             assertThat(response.message()).isEqualTo("Order already confirmed");
 
             verify(walletService, never()).credit(any(), any());
-            verify(transactionService, never()).createTransaction(any(), any(), any(), any(), anyString(), anyString());
+            verify(transactionService, never()).createTransaction(any(CreateTransactionCommand.class));
         }
 
         @Test
@@ -178,9 +230,9 @@ class PaymentServiceImplTest {
             // then
             assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.SUCCESS);
             verify(walletService, times(1)).credit(10L, new BigDecimal("50000"));
-            verify(transactionService, times(1)).createTransaction(
-                    eq(testWallet), eq(TransactionType.DEPOSIT), eq(TransactionStatus.SUCCESS),
-                    eq(new BigDecimal("50000")), eq("VNPAY_123"), anyString());
+            verify(transactionService, times(1)).createTransaction(new CreateTransactionCommand(
+                    testWallet, TransactionType.DEPOSIT, TransactionStatus.SUCCESS,
+                    new BigDecimal("50000"), "VNPAY_123", "VNPay deposit successful"));
 
             assertThat(response.rspCode()).isEqualTo("00");
         }
@@ -199,9 +251,9 @@ class PaymentServiceImplTest {
             // then
             assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.FAILED);
             verify(walletService, never()).credit(any(), any());
-            verify(transactionService, times(1)).createTransaction(
-                    eq(testWallet), eq(TransactionType.DEPOSIT), eq(TransactionStatus.FAILED),
-                    eq(new BigDecimal("50000")), eq("VNPAY_123"), anyString());
+            verify(transactionService, times(1)).createTransaction(new CreateTransactionCommand(
+                    testWallet, TransactionType.DEPOSIT, TransactionStatus.FAILED,
+                    new BigDecimal("50000"), "VNPAY_123", "VNPay deposit failed"));
 
             assertThat(response.rspCode()).isEqualTo("00");
         }

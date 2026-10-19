@@ -1,11 +1,11 @@
 package com.minh.paymentsystem.transfer.dto;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 public record TransferResponse(
         @Schema(description = "ID of the transaction", example = "12345")
@@ -21,6 +21,5 @@ public record TransferResponse(
         TransactionStatus status,
 
         @Schema(description = "Time of creation")
-        LocalDateTime createdAt
-) {
+        LocalDateTime createdAt) {
 }

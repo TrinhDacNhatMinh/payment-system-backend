@@ -23,6 +23,5 @@ public record RegisterRequest(
 
         @Schema(description = "User's phone number", example = "0901234567")
         @NotBlank(message = "Phone number is required")
-        String phone
-) {
+        String phone) {
 }

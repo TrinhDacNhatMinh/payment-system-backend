@@ -1,7 +1,17 @@
 package com.minh.paymentsystem.transfer.service;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.transaction.dto.CreateTransactionCommand;
 import com.minh.paymentsystem.transaction.entity.Transaction;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transaction.enums.TransactionType;
@@ -13,17 +23,9 @@ import com.minh.paymentsystem.user.entity.UserStatus;
 import com.minh.paymentsystem.user.service.UserService;
 import com.minh.paymentsystem.wallet.entity.Wallet;
 import com.minh.paymentsystem.wallet.service.WalletService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.UUID;
-
-@Slf4j
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class TransferServiceImpl implements TransferService {
 
@@ -34,81 +36,62 @@ public class TransferServiceImpl implements TransferService {
     @Override
     @Transactional
     public TransferResponse transfer(Long fromUserId, TransferRequest request) {
-        // 1. Validate and get recipient info
-        validateTransfer(fromUserId, request);
-
-        // 2. Fetch sender wallet and recipient wallet
-        User toUser;
-        try {
-            toUser = userService.getUserByEmail(request.toEmail());
-        } catch (BusinessException e) {
-            throw new BusinessException(ErrorCode.RECIPIENT_NOT_FOUND);
-        }
+        User fromUser = getSender(fromUserId);
+        validateNotSelfTransfer(fromUser, request.toEmail());
+        User toUser = getRecipient(request.toEmail());
+        validateTransfer(toUser, request);
 
         Wallet senderWallet = walletService.getWalletByUserId(fromUserId);
         Wallet recipientWallet = walletService.getWalletByUserId(toUser.getId());
 
-        // 3. Debit sender
         walletService.debit(senderWallet.getId(), request.amount());
-
-        // 4. Credit recipient
         walletService.credit(recipientWallet.getId(), request.amount());
 
-        // 5. Generate base reference code (using UUID)
         String baseReferenceCode = UUID.randomUUID().toString();
-
-        // 6. Create TRANSFER_OUT transaction for sender
-        // Note: referenceCode must be unique, so we append _OUT and _IN suffixes
-        Transaction transferOut = transactionService.createTransaction(
-                senderWallet,
-                TransactionType.TRANSFER_OUT,
-                TransactionStatus.SUCCESS,
-                request.amount(),
-                baseReferenceCode + "_OUT",
-                request.description()
-        );
-
-        // 7. Create TRANSFER_IN transaction for recipient
-        Transaction transferIn = transactionService.createTransaction(
-                recipientWallet,
-                TransactionType.TRANSFER_IN,
-                TransactionStatus.SUCCESS,
-                request.amount(),
-                baseReferenceCode + "_IN",
-                request.description()
-        );
-
-        // 8. Bidirectional link (set relatedTransactionId)
+        // References share a base but require distinct suffixes for uniqueness.
+        Transaction transferOut = createTransferTransaction(senderWallet, request, TransactionType.TRANSFER_OUT, baseReferenceCode + "_OUT");
+        Transaction transferIn = createTransferTransaction(recipientWallet, request, TransactionType.TRANSFER_IN, baseReferenceCode + "_IN");
         transferOut.setRelatedTransactionId(transferIn.getId());
         transferIn.setRelatedTransactionId(transferOut.getId());
 
-        // 9. Return TransferResponse
+        log.info("Transfer processed: outgoingTransactionId={}, incomingTransactionId={}", transferOut.getId(), transferIn.getId());
         return new TransferResponse(
                 transferOut.getId(),
-                senderWallet.getBalance().subtract(request.amount()),
+                senderWallet.getBalance(),
                 request.amount(),
                 TransactionStatus.SUCCESS,
-                LocalDateTime.now()
-        );
+                LocalDateTime.now());
     }
 
-    private void validateTransfer(Long fromUserId, TransferRequest request) {
-        User fromUser;
+    private User getSender(Long userId) {
         try {
-            fromUser = userService.getUserById(fromUserId);
+            return userService.getUserById(userId);
         } catch (BusinessException e) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+            if (e.getErrorCode() == ErrorCode.USER_NOT_FOUND) {
+                throw new BusinessException(ErrorCode.ACCESS_DENIED, e);
+            }
+            throw e;
         }
-        if (fromUser.getEmail().equals(request.toEmail())) {
+    }
+
+    private void validateNotSelfTransfer(User fromUser, String recipientEmail) {
+        if (fromUser.getEmail().equals(recipientEmail)) {
             throw new BusinessException(ErrorCode.SELF_TRANSFER_NOT_ALLOWED);
         }
+    }
 
-        User toUser;
+    private User getRecipient(String email) {
         try {
-            toUser = userService.getUserByEmail(request.toEmail());
+            return userService.getUserByEmail(email);
         } catch (BusinessException e) {
-            throw new BusinessException(ErrorCode.RECIPIENT_NOT_FOUND);
+            if (e.getErrorCode() == ErrorCode.USER_NOT_FOUND) {
+                throw new BusinessException(ErrorCode.RECIPIENT_NOT_FOUND, e);
+            }
+            throw e;
         }
+    }
+
+    private void validateTransfer(User toUser, TransferRequest request) {
         if (toUser.getStatus() == UserStatus.LOCKED) {
             throw new BusinessException(ErrorCode.RECIPIENT_LOCKED);
         }
@@ -116,5 +99,15 @@ public class TransferServiceImpl implements TransferService {
         if (request.amount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException(ErrorCode.AMOUNT_OUT_OF_RANGE);
         }
+    }
+
+    private Transaction createTransferTransaction(Wallet wallet, TransferRequest request, TransactionType type, String referenceCode) {
+        return transactionService.createTransaction(new CreateTransactionCommand(
+                wallet,
+                type,
+                TransactionStatus.SUCCESS,
+                request.amount(),
+                referenceCode,
+                request.description()));
     }
 }

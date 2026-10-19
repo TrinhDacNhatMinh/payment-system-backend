@@ -1,16 +1,14 @@
 package com.minh.paymentsystem.payment.dto;
 
-import io.swagger.v3.oas.annotations.media.Schema;
-
+import java.math.BigDecimal;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
-import java.math.BigDecimal;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 public record DepositRequest(
-        @Schema(description = "Amount for the transaction", example = "500000")
+        @Schema(description = "Deposit amount in VND, from 10000 to 50000000 inclusive", minimum = "10000", maximum = "50000000", example = "500000")
         @NotNull(message = "Amount must not be null")
         @Positive(message = "Amount must be positive")
-        BigDecimal amount
-) {
+        BigDecimal amount) {
 }

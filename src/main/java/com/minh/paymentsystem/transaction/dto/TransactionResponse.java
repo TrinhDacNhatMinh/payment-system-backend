@@ -1,21 +1,21 @@
 package com.minh.paymentsystem.transaction.dto;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Builder;
 
 import com.minh.paymentsystem.transaction.entity.Transaction;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transaction.enums.TransactionType;
-import lombok.Builder;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Builder
 public record TransactionResponse(
         @Schema(description = "ID", example = "1")
         Long id,
 
-        @Schema(description = "Transaction type", example = "TRANSFER")
+        @Schema(description = "Transaction type", example = "TRANSFER_OUT")
         TransactionType type,
 
         @Schema(description = "Amount for the transaction", example = "500000")
@@ -28,8 +28,7 @@ public record TransactionResponse(
         String description,
 
         @Schema(description = "Time of creation")
-        LocalDateTime createdAt
-) {
+        LocalDateTime createdAt) {
     public static TransactionResponse from(Transaction transaction) {
         return TransactionResponse.builder()
                 .id(transaction.getId())

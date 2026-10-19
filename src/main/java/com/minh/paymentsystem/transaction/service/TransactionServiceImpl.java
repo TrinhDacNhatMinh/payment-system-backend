@@ -1,17 +1,7 @@
 package com.minh.paymentsystem.transaction.service;
 
-import com.minh.paymentsystem.common.dto.PageResponse;
-import com.minh.paymentsystem.common.exception.BusinessException;
-import com.minh.paymentsystem.common.exception.ErrorCode;
-import com.minh.paymentsystem.transaction.dto.TransactionFilterRequest;
-import com.minh.paymentsystem.transaction.dto.TransactionResponse;
-import com.minh.paymentsystem.transaction.dto.AdminTransactionFilterRequest;
-import com.minh.paymentsystem.transaction.entity.Transaction;
-import com.minh.paymentsystem.transaction.enums.TransactionStatus;
-import com.minh.paymentsystem.transaction.enums.TransactionType;
-import com.minh.paymentsystem.transaction.repository.TransactionRepository;
-import com.minh.paymentsystem.wallet.entity.Wallet;
-import com.minh.paymentsystem.wallet.service.WalletService;
+import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -21,11 +11,18 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.util.List;
+import com.minh.paymentsystem.common.dto.PageResponse;
+import com.minh.paymentsystem.transaction.dto.AdminTransactionFilterRequest;
+import com.minh.paymentsystem.transaction.dto.CreateTransactionCommand;
+import com.minh.paymentsystem.transaction.dto.TransactionFilterRequest;
+import com.minh.paymentsystem.transaction.dto.TransactionResponse;
+import com.minh.paymentsystem.transaction.entity.Transaction;
+import com.minh.paymentsystem.transaction.repository.TransactionRepository;
+import com.minh.paymentsystem.wallet.entity.Wallet;
+import com.minh.paymentsystem.wallet.service.WalletService;
 
-@Slf4j
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class TransactionServiceImpl implements TransactionService {
 
@@ -34,16 +31,16 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     @Transactional
-    public Transaction createTransaction(Wallet wallet, TransactionType type, TransactionStatus status, BigDecimal amount, String referenceCode, String description) {
-        log.info("Creating transaction for wallet {} with type {}, status {} and amount {}", wallet.getId(), type, status, amount);
+    public Transaction createTransaction(CreateTransactionCommand command) {
+        log.debug("Creating transaction for wallet {} with type {}, status {} and amount {}", command.wallet().getId(), command.type(), command.status(), command.amount());
 
         Transaction transaction = Transaction.builder()
-                .wallet(wallet)
-                .type(type)
-                .status(status)
-                .amount(amount)
-                .referenceCode(referenceCode)
-                .description(description)
+                .wallet(command.wallet())
+                .type(command.type())
+                .status(command.status())
+                .amount(command.amount())
+                .referenceCode(command.referenceCode())
+                .description(command.description())
                 .build();
 
         return transactionRepository.save(transaction);
@@ -53,15 +50,15 @@ public class TransactionServiceImpl implements TransactionService {
     @Transactional(readOnly = true)
     public PageResponse<TransactionResponse> getMyTransactions(Long userId, TransactionFilterRequest filter) {
 
-        log.info("Fetching transactions for user id={} with filter={}", userId, filter);
+        log.debug("Fetching transactions: userId={}, type={}, status={}, fromDate={}, toDate={}, page={}, size={}",
+                userId, filter.type(), filter.status(), filter.fromDate(), filter.toDate(), filter.page(), filter.size());
 
         Wallet wallet = walletService.getWalletByUserId(userId);
 
         Pageable pageable = PageRequest.of(
                 filter.page(),
                 filter.size(),
-                Sort.by("createdAt").descending()
-        );
+                Sort.by("createdAt").descending());
 
         Page<Transaction> transactionPage = transactionRepository.findWithFilter(
                 wallet.getId(),
@@ -69,26 +66,15 @@ public class TransactionServiceImpl implements TransactionService {
                 filter.status(),
                 filter.fromDate(),
                 filter.toDate(),
-                pageable
-        );
+                pageable);
 
-        List<TransactionResponse> content = transactionPage.getContent().stream()
-                .map(TransactionResponse::from)
-                .toList();
-
-        return new PageResponse<>(
-                content,
-                transactionPage.getNumber(),
-                transactionPage.getSize(),
-                transactionPage.getTotalElements(),
-                transactionPage.getTotalPages()
-        );
+        return toPageResponse(transactionPage);
     }
 
     @Override
     @Transactional(readOnly = true)
     public PageResponse<TransactionResponse> getAllTransactions(AdminTransactionFilterRequest filter, Pageable pageable) {
-        log.info("Admin fetching transactions with filter={}", filter);
+        log.debug("Admin fetching transactions for user id={}, type={}, status={}", filter.userId(), filter.type(), filter.status());
 
         Page<Transaction> transactionPage = transactionRepository.findWithAdminFilter(
                 filter.userId(),
@@ -97,10 +83,14 @@ public class TransactionServiceImpl implements TransactionService {
                 filter.status(),
                 filter.fromDate(),
                 filter.toDate(),
-                pageable
-        );
+                pageable);
 
-        List<TransactionResponse> content = transactionPage.getContent().stream()
+        return toPageResponse(transactionPage);
+    }
+
+    private PageResponse<TransactionResponse> toPageResponse(Page<Transaction> transactionPage) {
+        List<TransactionResponse> content = transactionPage.getContent()
+                .stream()
                 .map(TransactionResponse::from)
                 .toList();
 
@@ -109,7 +99,6 @@ public class TransactionServiceImpl implements TransactionService {
                 transactionPage.getNumber(),
                 transactionPage.getSize(),
                 transactionPage.getTotalElements(),
-                transactionPage.getTotalPages()
-        );
+                transactionPage.getTotalPages());
     }
 }

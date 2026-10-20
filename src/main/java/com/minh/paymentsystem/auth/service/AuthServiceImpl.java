@@ -1,5 +1,6 @@
 package com.minh.paymentsystem.auth.service;
 
+import java.time.Duration;
 import java.time.Instant;
 
 import lombok.RequiredArgsConstructor;
@@ -7,12 +8,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import com.minh.paymentsystem.auth.dto.AuthResponse;
 import com.minh.paymentsystem.auth.dto.LoginRequest;
-import com.minh.paymentsystem.auth.dto.RefreshTokenRequest;
 import com.minh.paymentsystem.auth.dto.RegisterRequest;
 import com.minh.paymentsystem.auth.security.JwtTokenProvider;
+import com.minh.paymentsystem.auth.security.RefreshTokenCookieProvider;
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.user.dto.UserResponse;
@@ -33,6 +35,7 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final RefreshTokenCookieProvider refreshTokenCookieProvider;
     private final WalletService walletService;
 
     @Override
@@ -64,9 +67,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public AuthResponse refresh(RefreshTokenRequest request) {
+    public AuthResponse refresh(String refreshToken) {
         log.debug("Processing refresh token request");
-        RefreshToken token = validateRefreshToken(request);
+        RefreshToken token = validateRefreshToken(refreshToken);
 
         User user = token.getUser();
         if (user.getStatus() == UserStatus.LOCKED) {
@@ -81,15 +84,16 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public void logout(RefreshTokenRequest request) {
+    public String logout(String refreshToken) {
         log.debug("Processing logout request");
-        RefreshToken token = refreshTokenService.getToken(request.refreshToken());
+        RefreshToken token = getRefreshToken(refreshToken);
         if (token.isRevoked()) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_REVOKED);
         }
         User user = token.getUser();
         refreshTokenService.revokeAllUserTokens(user);
         log.info("Logout processed: userId={}", user.getId());
+        return refreshTokenCookieProvider.clearCookie();
     }
 
     private void validateRegister(RegisterRequest request) {
@@ -132,8 +136,8 @@ public class AuthServiceImpl implements AuthService {
         return user;
     }
 
-    private RefreshToken validateRefreshToken(RefreshTokenRequest request) {
-        RefreshToken token = refreshTokenService.getToken(request.refreshToken());
+    private RefreshToken validateRefreshToken(String refreshToken) {
+        RefreshToken token = getRefreshToken(refreshToken);
         if (token.isRevoked()) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_REVOKED);
         }
@@ -144,24 +148,32 @@ public class AuthServiceImpl implements AuthService {
         return token;
     }
 
-    private AuthResponse issueAuthTokens(User user) {
-        String accessToken = jwtTokenProvider.generateAccessToken(user);
-
-        String refreshToken = jwtTokenProvider.generateRefreshToken();
-        saveRefreshToken(user, refreshToken);
-
-        return new AuthResponse(
-                accessToken,
-                refreshToken,
-                "Bearer",
-                jwtTokenProvider.getAccessExpiration() / 1000);
+    private RefreshToken getRefreshToken(String refreshToken) {
+        if (!StringUtils.hasText(refreshToken)) {
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_MISSING);
+        }
+        return refreshTokenService.getToken(refreshToken);
     }
 
-    private void saveRefreshToken(User user, String token) {
+    private AuthResponse issueAuthTokens(User user) {
+        String accessToken = jwtTokenProvider.generateAccessToken(user);
+        String refreshToken = jwtTokenProvider.generateRefreshToken();
+        Duration refreshTokenMaxAge = Duration.ofMillis(jwtTokenProvider.getRefreshExpiration());
+        saveRefreshToken(user, refreshToken, refreshTokenMaxAge);
+
+        String cookie = refreshTokenCookieProvider.createCookie(refreshToken, refreshTokenMaxAge);
+        return new AuthResponse(
+                accessToken,
+                "Bearer",
+                jwtTokenProvider.getAccessExpiration() / 1000,
+                cookie);
+    }
+
+    private void saveRefreshToken(User user, String token, Duration maxAge) {
         RefreshToken refreshToken = RefreshToken.builder()
                 .user(user)
                 .token(token)
-                .expiresAt(Instant.now().plusMillis(jwtTokenProvider.getRefreshExpiration()))
+                .expiresAt(Instant.now().plus(maxAge))
                 .revoked(false)
                 .build();
         refreshTokenService.saveToken(refreshToken);

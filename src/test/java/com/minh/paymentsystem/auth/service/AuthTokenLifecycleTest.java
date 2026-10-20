@@ -3,6 +3,7 @@ package com.minh.paymentsystem.auth.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.net.HttpCookie;
 import java.time.Instant;
 
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.auth.dto.AuthResponse;
 import com.minh.paymentsystem.auth.dto.LoginRequest;
-import com.minh.paymentsystem.auth.dto.RefreshTokenRequest;
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.user.entity.RefreshToken;
@@ -40,6 +40,7 @@ class AuthTokenLifecycleTest {
     void shouldPersistRotatedTokenAndRejectReuseOfOldToken() {
         User user = createUser("rotation@test.com");
         AuthResponse login = authService.login(new LoginRequest(user.getEmail(), "password123"));
+        String loginRefreshToken = HttpCookie.parse(login.cookie()).get(0).getValue();
         RefreshToken otherToken = refreshTokenRepository.save(RefreshToken.builder()
                 .user(user)
                 .token("another-active-refresh-token")
@@ -47,16 +48,17 @@ class AuthTokenLifecycleTest {
                 .revoked(false)
                 .build());
 
-        AuthResponse refreshed = authService.refresh(new RefreshTokenRequest(login.refreshToken()));
+        AuthResponse refreshed = authService.refresh(loginRefreshToken);
+        String refreshedToken = HttpCookie.parse(refreshed.cookie()).get(0).getValue();
         refreshTokenRepository.flush();
 
-        assertThat(refreshed.refreshToken()).isNotEqualTo(login.refreshToken());
-        assertThat(refreshTokenRepository.findByToken(login.refreshToken()).orElseThrow().isRevoked()).isTrue();
+        assertThat(refreshedToken).isNotEqualTo(loginRefreshToken);
+        assertThat(refreshTokenRepository.findByToken(loginRefreshToken).orElseThrow().isRevoked()).isTrue();
         assertThat(refreshTokenRepository.findById(otherToken.getId()).orElseThrow().isRevoked()).isTrue();
         assertThat(refreshTokenRepository.findAllByUserAndRevokedFalse(user))
-                .extracting(RefreshToken::getToken).containsExactly(refreshed.refreshToken());
+                .extracting(RefreshToken::getToken).containsExactly(refreshedToken);
         BusinessException exception = assertThrows(BusinessException.class,
-                () -> authService.refresh(new RefreshTokenRequest(login.refreshToken())));
+                () -> authService.refresh(loginRefreshToken));
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_REVOKED);
     }
 
@@ -64,6 +66,7 @@ class AuthTokenLifecycleTest {
     void shouldRevokeAllRefreshTokensWhenLoggingOutWithExpiredToken() {
         User user = createUser("logout@test.com");
         AuthResponse login = authService.login(new LoginRequest(user.getEmail(), "password123"));
+        String loginRefreshToken = HttpCookie.parse(login.cookie()).get(0).getValue();
         RefreshToken expired = refreshTokenRepository.save(RefreshToken.builder()
                 .user(user)
                 .token("expired-refresh-token")
@@ -71,11 +74,11 @@ class AuthTokenLifecycleTest {
                 .revoked(false)
                 .build());
 
-        authService.logout(new RefreshTokenRequest(expired.getToken()));
+        authService.logout(expired.getToken());
         refreshTokenRepository.flush();
 
         assertThat(refreshTokenRepository.findAllByUserAndRevokedFalse(user)).isEmpty();
-        assertThat(refreshTokenRepository.findByToken(login.refreshToken()).orElseThrow().isRevoked()).isTrue();
+        assertThat(refreshTokenRepository.findByToken(loginRefreshToken).orElseThrow().isRevoked()).isTrue();
         assertThat(refreshTokenRepository.findById(expired.getId()).orElseThrow().isRevoked()).isTrue();
     }
 

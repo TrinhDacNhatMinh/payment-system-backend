@@ -85,9 +85,9 @@ mvn test
 | Method | Endpoint                          | Description                       | Auth  |
 |--------|-----------------------------------|-----------------------------------|-------|
 | POST   | `/api/v1/auth/register`           | Register a new user               | None  |
-| POST   | `/api/v1/auth/login`              | Authenticate user and get tokens  | None  |
-| POST   | `/api/v1/auth/refresh`            | Refresh access token              | None  |
-| POST   | `/api/v1/auth/logout`             | Revoke refresh token              | USER  |
+| POST   | `/api/v1/auth/login`              | Return access token and set refresh cookie | None |
+| POST   | `/api/v1/auth/refresh`            | Rotate tokens using refresh cookie | Refresh cookie |
+| POST   | `/api/v1/auth/logout`             | Revoke refresh tokens and clear cookie | Refresh cookie |
 | GET    | `/api/v1/wallet/me`               | Get current user's wallet balance | USER  |
 | POST   | `/api/v1/payment/deposit`         | Create a VNPay deposit URL        | USER  |
 | POST   | `/api/v1/payment/vnpay-webhook`   | VNPay IPN Webhook callback        | None  |
@@ -97,6 +97,30 @@ mvn test
 | GET    | `/api/v1/admin/transactions`      | View all system transactions      | ADMIN |
 | PATCH  | `/api/v1/admin/users/{id}/lock`   | Lock a user account               | ADMIN |
 | PATCH  | `/api/v1/admin/users/{id}/unlock` | Unlock a user account             | ADMIN |
+
+### Refresh token cookie
+
+Login accepts the existing email/password JSON request. Its JSON response contains only `accessToken`, `tokenType`, and `expiresIn` inside `data`. The refresh token is sent exclusively in the `Set-Cookie` header, not in JSON.
+
+The service returns an `AuthResponse` containing the prepared cookie header value. Its `cookie` component is annotated with `@JsonIgnore` and hidden from the OpenAPI schema; the controller uses `response.cookie()` only for `Set-Cookie`. Cookie creation and deletion are handled by `RefreshTokenCookieProvider`.
+
+The `refresh_token` cookie is HttpOnly, uses `Path=/api/v1/auth` and `SameSite=Lax`, and has no Domain attribute. Its Max-Age is derived from `jwt.refresh-expiration` (configured in milliseconds), matching the lifetime of the stored refresh token. Login and refresh responses use `Cache-Control: no-store`.
+
+Configure cookie transport in your local `application.yaml`:
+
+```yaml
+auth:
+  refresh-token-cookie:
+    secure: false # Local HTTP only; use true with HTTPS
+```
+
+Secure defaults to `true` when this setting is absent. The configuration example explicitly uses `false` for local HTTP.
+
+Refresh and logout accept the `refresh_token` cookie and do not require a request body. The old `{"refreshToken":"..."}` JSON body is no longer used. Refresh rotates the token and replaces the cookie. Successful logout revokes the user's refresh tokens and expires the cookie with the same name and scope and `Max-Age=0`.
+
+A missing or blank refresh cookie returns HTTP 401 with `REFRESH_TOKEN_MISSING`. Existing expired, revoked, and unknown-token errors remain unchanged. Logout still accepts an expired token that exists and is not revoked; repeated logout is not yet idempotent. Access tokens already issued remain valid until expiration.
+
+Browser clients should use `credentials: "include"` for cross-origin auth requests and must not read or store the refresh token in JavaScript. Cross-origin credentials also require the planned CORS configuration; CSRF protection, Origin checks, and concurrent-session serialization are separate follow-up work and are not implemented by this cookie change.
 
 ## Project Structure
 
@@ -256,7 +280,7 @@ sequenceDiagram
     Client->>Controller: POST /api/v1/auth/login
     Controller->>Provider: Verify credentials & generate tokens
     Provider-->>Controller: Tokens generated
-    Controller-->>Client: Return Access Token & Refresh Token
+    Controller-->>Client: Access token JSON + HttpOnly refresh_token cookie
     Client->>Filter: Request API with "Bearer <AccessToken>"
     Filter->>Provider: Validate Access Token
     Provider-->>Filter: Token valid (Claims)

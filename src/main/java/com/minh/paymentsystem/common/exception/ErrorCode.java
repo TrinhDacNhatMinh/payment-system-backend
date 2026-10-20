@@ -16,6 +16,7 @@ public enum ErrorCode {
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Invalid email or password"),
     TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "JWT token has expired"),
     TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "Invalid JWT token"),
+    REFRESH_TOKEN_MISSING(HttpStatus.UNAUTHORIZED, "Refresh token cookie is missing"),
     REFRESH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "Refresh token has expired"),
     REFRESH_TOKEN_REVOKED(HttpStatus.UNAUTHORIZED, "Refresh token has been revoked"),
 

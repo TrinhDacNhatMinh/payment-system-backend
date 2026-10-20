@@ -28,6 +28,10 @@ jwt:
   access-expiration: 1800000 # 30 mins
   refresh-expiration: 604800000 # 7 days
 
+auth:
+  refresh-token-cookie:
+    secure: false # Local HTTP only; set true when using HTTPS
+
 vnpay:
   tmn-code: your-vnpay-code
   hash-secret: your-vnpay-secret

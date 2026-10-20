@@ -1,7 +1,6 @@
 package com.minh.paymentsystem.common.entity;
 
 import java.time.LocalDateTime;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
 

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import java.time.Duration;
 import java.time.Instant;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -22,9 +23,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.minh.paymentsystem.auth.dto.AuthResponse;
 import com.minh.paymentsystem.auth.dto.LoginRequest;
-import com.minh.paymentsystem.auth.dto.RefreshTokenRequest;
 import com.minh.paymentsystem.auth.dto.RegisterRequest;
 import com.minh.paymentsystem.auth.security.JwtTokenProvider;
+import com.minh.paymentsystem.auth.security.RefreshTokenCookieProvider;
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.user.dto.UserResponse;
@@ -52,6 +53,9 @@ public class AuthServiceImplTest {
     private JwtTokenProvider jwtTokenProvider;
 
     @Mock
+    private RefreshTokenCookieProvider refreshTokenCookieProvider;
+
+    @Mock
     private WalletService walletService;
 
     @InjectMocks
@@ -63,7 +67,7 @@ public class AuthServiceImplTest {
     private User user;
     private RegisterRequest registerRequest;
     private LoginRequest loginRequest;
-    private RefreshTokenRequest refreshTokenRequest;
+    private String refreshToken;
     private RefreshToken validRefreshToken;
 
     @BeforeEach
@@ -86,7 +90,7 @@ public class AuthServiceImplTest {
 
         loginRequest = new LoginRequest("test@example.com", "password123");
 
-        refreshTokenRequest = new RefreshTokenRequest("valid-refresh-token");
+        refreshToken = "valid-refresh-token";
 
         validRefreshToken = RefreshToken.builder()
                 .id(1L)
@@ -265,7 +269,7 @@ public class AuthServiceImplTest {
             // when & then
             BusinessException ex = assertThrows(BusinessException.class, () -> authService.login(loginRequest));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.ACCOUNT_LOCKED);
-            verifyNoInteractions(refreshTokenService, jwtTokenProvider);
+            verifyNoInteractions(refreshTokenService, jwtTokenProvider, refreshTokenCookieProvider);
         }
 
         @Test
@@ -277,7 +281,7 @@ public class AuthServiceImplTest {
             BusinessException exception = assertThrows(BusinessException.class, () -> authService.login(loginRequest));
 
             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS);
-            verifyNoInteractions(refreshTokenService, jwtTokenProvider);
+            verifyNoInteractions(refreshTokenService, jwtTokenProvider, refreshTokenCookieProvider);
         }
 
         @Test
@@ -300,9 +304,12 @@ public class AuthServiceImplTest {
             when(jwtTokenProvider.generateAccessToken(user))
                     .thenReturn("new-access-token");
             when(jwtTokenProvider.generateRefreshToken()).thenReturn("new-refresh-token");
+            when(refreshTokenCookieProvider.createCookie("new-refresh-token", Duration.ofDays(7))).thenReturn("login-cookie-header");
+            when(jwtTokenProvider.getRefreshExpiration()).thenReturn(604800000L);
             when(jwtTokenProvider.getAccessExpiration()).thenReturn(3600000L); // 1 hour
 
             ArgumentCaptor<RefreshToken> newTokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
+            Instant beforeLogin = Instant.now();
 
             // when
             AuthResponse response = authService.login(loginRequest);
@@ -314,7 +321,12 @@ public class AuthServiceImplTest {
             assertThat(newTokenCaptor.getValue().getToken()).isEqualTo("new-refresh-token");
 
             assertThat(response.accessToken()).isEqualTo("new-access-token");
-            assertThat(response.refreshToken()).isEqualTo("new-refresh-token");
+            assertThat(response.cookie()).isEqualTo("login-cookie-header");
+            verify(refreshTokenCookieProvider).createCookie("new-refresh-token", Duration.ofDays(7));
+            assertThat(newTokenCaptor.getValue().getUser()).isSameAs(user);
+            assertThat(newTokenCaptor.getValue().isRevoked()).isFalse();
+            assertThat(newTokenCaptor.getValue().getExpiresAt()).isBetween(
+                    beforeLogin.plus(Duration.ofDays(7)), Instant.now().plus(Duration.ofDays(7)));
             assertThat(response.tokenType()).isEqualTo("Bearer");
             assertThat(response.expiresIn()).isEqualTo(3600L);
         }
@@ -325,14 +337,30 @@ public class AuthServiceImplTest {
     class RefreshTests {
 
         @Test
+        void shouldRejectMissingRefreshTokenBeforeLoadingToken() {
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(null));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_MISSING);
+            verifyNoInteractions(refreshTokenService, jwtTokenProvider, refreshTokenCookieProvider);
+        }
+
+        @Test
+        void shouldRejectBlankRefreshTokenBeforeLoadingToken() {
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(" "));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_MISSING);
+            verifyNoInteractions(refreshTokenService, jwtTokenProvider, refreshTokenCookieProvider);
+        }
+
+        @Test
         void refresh_tokenNotFound_throwsBusinessException() {
             // given
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken()))
+            when(refreshTokenService.getToken(refreshToken))
                     .thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class,
-                    () -> authService.refresh(refreshTokenRequest));
+                    () -> authService.refresh(refreshToken));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
 
@@ -340,72 +368,74 @@ public class AuthServiceImplTest {
         void refresh_tokenRevoked_throwsBusinessException() {
             // given
             validRefreshToken.setRevoked(true);
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
+            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class,
-                    () -> authService.refresh(refreshTokenRequest));
+                    () -> authService.refresh(refreshToken));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_REVOKED);
             verify(refreshTokenService, never()).revokeAllUserTokens(any());
             verify(refreshTokenService, never()).saveToken(any());
-            verifyNoInteractions(jwtTokenProvider);
+            verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
         }
 
         @Test
         void refresh_tokenExpired_throwsBusinessException() {
             // given
             validRefreshToken.setExpiresAt(Instant.now().minusSeconds(10));
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
+            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class,
-                    () -> authService.refresh(refreshTokenRequest));
+                    () -> authService.refresh(refreshToken));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_EXPIRED);
             verify(refreshTokenService, never()).revokeAllUserTokens(any());
             verify(refreshTokenService, never()).saveToken(any());
-            verifyNoInteractions(jwtTokenProvider);
+            verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
         }
 
         @Test
         void refresh_lockedAccount_doesNotRevokeOrIssueTokens() {
             user.setStatus(UserStatus.LOCKED);
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
+            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
 
-            BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(refreshTokenRequest));
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(refreshToken));
 
             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ACCOUNT_LOCKED);
             verify(refreshTokenService, never()).revokeAllUserTokens(any());
             verify(refreshTokenService, never()).saveToken(any());
-            verifyNoInteractions(jwtTokenProvider);
+            verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
         }
 
         @Test
         void refresh_validToken_revokesOldTokensAndReturnsNewPair() {
             // given
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
+            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
             when(jwtTokenProvider.generateAccessToken(user))
                     .thenReturn("new-access-token");
             when(jwtTokenProvider.generateRefreshToken()).thenReturn("rotated-refresh-token");
+            when(refreshTokenCookieProvider.createCookie("rotated-refresh-token", Duration.ofDays(7))).thenReturn("rotated-cookie-header");
             when(jwtTokenProvider.getRefreshExpiration()).thenReturn(604800000L);
             when(jwtTokenProvider.getAccessExpiration()).thenReturn(3600000L);
             Instant beforeRefresh = Instant.now();
 
             // when
-            AuthResponse response = authService.refresh(refreshTokenRequest);
+            AuthResponse response = authService.refresh(refreshToken);
 
             // then
             assertThat(response.accessToken()).isEqualTo("new-access-token");
-            assertThat(response.refreshToken()).isEqualTo("rotated-refresh-token")
-                    .isNotEqualTo(refreshTokenRequest.refreshToken());
+            assertThat(response.cookie()).isEqualTo("rotated-cookie-header");
+            verify(refreshTokenCookieProvider).createCookie("rotated-refresh-token", Duration.ofDays(7));
             assertThat(response.tokenType()).isEqualTo("Bearer");
             assertThat(response.expiresIn()).isEqualTo(3600L);
             ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);
             InOrder order = inOrder(refreshTokenService);
-            order.verify(refreshTokenService).getToken(refreshTokenRequest.refreshToken());
+            order.verify(refreshTokenService).getToken(refreshToken);
             order.verify(refreshTokenService).revokeAllUserTokens(user);
             order.verify(refreshTokenService).saveToken(captor.capture());
             assertThat(captor.getValue().getUser()).isSameAs(user);
-            assertThat(captor.getValue().getToken()).isEqualTo(response.refreshToken());
+            assertThat(captor.getValue().getToken()).isEqualTo("rotated-refresh-token")
+                    .isNotEqualTo(refreshToken);
             assertThat(captor.getValue().isRevoked()).isFalse();
             assertThat(captor.getValue().getExpiresAt()).isBetween(
                     beforeRefresh.plusMillis(604800000L), Instant.now().plusMillis(604800000L));
@@ -417,51 +447,71 @@ public class AuthServiceImplTest {
     class LogoutTests {
 
         @Test
+        void shouldRejectMissingLogoutTokenBeforeLoadingToken() {
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.logout(null));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_MISSING);
+            verifyNoInteractions(refreshTokenService, jwtTokenProvider, refreshTokenCookieProvider);
+        }
+
+        @Test
+        void shouldRejectBlankLogoutTokenBeforeLoadingToken() {
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.logout(" "));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_MISSING);
+            verifyNoInteractions(refreshTokenService, jwtTokenProvider, refreshTokenCookieProvider);
+        }
+
+        @Test
         void logout_tokenNotFound_throwsBusinessException() {
             // given
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken()))
+            when(refreshTokenService.getToken(refreshToken))
                     .thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
 
             // when & then
-            BusinessException ex = assertThrows(BusinessException.class, () -> authService.logout(refreshTokenRequest));
+            BusinessException ex = assertThrows(BusinessException.class, () -> authService.logout(refreshToken));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
 
         @Test
         void logout_validToken_revokesAllUserTokens() {
             // given
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
+            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
+            when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
 
             // when
-            authService.logout(refreshTokenRequest);
+            String cookie = authService.logout(refreshToken);
 
             // then
             verify(refreshTokenService).revokeAllUserTokens(user);
             verify(refreshTokenService, never()).saveToken(any());
+            assertThat(cookie).isEqualTo("cleared-cookie-header");
+            verify(refreshTokenCookieProvider).clearCookie();
             verifyNoInteractions(jwtTokenProvider);
         }
 
         @Test
         void logout_expiredToken_stillRevokesAllUserTokens() {
             validRefreshToken.setExpiresAt(Instant.now().minusSeconds(60));
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
+            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
 
-            authService.logout(refreshTokenRequest);
+            authService.logout(refreshToken);
 
             verify(refreshTokenService).revokeAllUserTokens(user);
+            verify(refreshTokenCookieProvider).clearCookie();
             verifyNoInteractions(jwtTokenProvider);
         }
 
         @Test
         void logout_revokedToken_returnsRevokedError() {
             validRefreshToken.setRevoked(true);
-            when(refreshTokenService.getToken(refreshTokenRequest.refreshToken())).thenReturn(validRefreshToken);
+            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
 
-            BusinessException exception = assertThrows(BusinessException.class, () -> authService.logout(refreshTokenRequest));
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.logout(refreshToken));
 
             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_REVOKED);
             verify(refreshTokenService, never()).revokeAllUserTokens(any());
-            verifyNoInteractions(jwtTokenProvider);
+            verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
         }
     }
 

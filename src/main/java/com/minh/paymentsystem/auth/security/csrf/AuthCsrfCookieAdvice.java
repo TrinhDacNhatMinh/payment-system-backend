@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.auth.security;
+package com.minh.paymentsystem.auth.security.csrf;
 
 import java.lang.reflect.Method;
 

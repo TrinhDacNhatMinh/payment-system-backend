@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.auth.security;
+package com.minh.paymentsystem.auth.security.jwt;
 
 import java.io.IOException;
 import jakarta.servlet.ServletException;

@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.auth.security;
+package com.minh.paymentsystem.auth.security.jwt;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;

@@ -29,7 +29,7 @@ import com.minh.paymentsystem.auth.dto.AuthResponse;
 import com.minh.paymentsystem.auth.dto.CsrfTokenResponse;
 import com.minh.paymentsystem.auth.dto.LoginRequest;
 import com.minh.paymentsystem.auth.dto.RegisterRequest;
-import com.minh.paymentsystem.auth.security.RefreshTokenCookieProvider;
+import com.minh.paymentsystem.auth.security.cookie.RefreshTokenCookieProvider;
 import com.minh.paymentsystem.auth.service.AuthService;
 import com.minh.paymentsystem.common.response.BaseResponse;
 import com.minh.paymentsystem.user.dto.UserResponse;

@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.auth.security;
+package com.minh.paymentsystem.auth.security.csrf;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +38,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.minh.paymentsystem.auth.controller.AuthController;
 import com.minh.paymentsystem.auth.dto.AuthResponse;
+import com.minh.paymentsystem.auth.security.AuthAccessDeniedHandler;
+import com.minh.paymentsystem.auth.security.cookie.RefreshTokenCookieProvider;
 import com.minh.paymentsystem.auth.service.AuthService;
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;

@@ -139,7 +139,7 @@ Refresh and logout accept the `refresh_token` cookie and do not require a reques
 
 A missing or blank refresh cookie returns HTTP 401 with `REFRESH_TOKEN_MISSING`. Existing expired, revoked, and unknown-token errors remain unchanged. Logout still accepts an expired token that exists and is not revoked; repeated logout is not yet idempotent. Access tokens already issued remain valid until expiration.
 
-Browser clients should use `credentials: "include"` for cross-origin auth requests and must not read or store the refresh token in JavaScript. Credentialed CORS and concurrent-session serialization remain follow-up work.
+Browser clients should use `credentials: "include"` for cross-origin auth requests and must not read or store the refresh token in JavaScript. CORS now uses the same `auth.allowed-origins` allowlist as the auth Origin checks. Concurrent-session serialization remains follow-up work.
 
 ### CSRF and Origin checks
 
@@ -153,7 +153,7 @@ Browsers set Origin automatically. To test auth POSTs from local Swagger UI host
 
 Successful login/logout delete the old CSRF cookie; fetch a fresh token before the next auth POST. Refresh preserves the CSRF cookie. Rejected Origin/CSRF checks do not revoke refresh tokens or clear the refresh cookie. Auth POST responses use `Cache-Control: no-store`. Bearer business endpoints and VNPay callbacks do not require this CSRF token.
 
-This changes the auth request contract: clients that omit CSRF/Origin will now receive 403. Browser integration from port 5173 still requires the separate CORS task, including credentialed preflight and error response headers. New CSRF tests have been added but have not been executed; earlier test counts below do not validate this change.
+This changes the auth request contract: clients that omit CSRF/Origin will now receive 403. CORS for `/api/v1/**` allows credentials from configured origins (local: `http://localhost:5173`), methods GET/HEAD/POST/PATCH/OPTIONS, and request headers Content-Type/Authorization/X-XSRF-TOKEN. Valid preflight is handled before authentication and CSRF. API errors for an allowed origin retain CORS headers; unlisted origins receive no CORS access. Origin rejections use `ORIGIN_NOT_ALLOWED`; unsupported CORS methods/headers use `ACCESS_DENIED`, both in `BaseResponse`. Set-Cookie is not exposed to JavaScript. New CSRF/CORS tests have been added but have not been executed, and browser integration is unverified; earlier test counts below do not validate these changes.
 
 ## Project Structure
 

@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.minh.paymentsystem.auth.security.CustomUserDetails;
+import com.minh.paymentsystem.auth.security.user.CustomUserDetails;
 import com.minh.paymentsystem.common.response.BaseResponse;
 import com.minh.paymentsystem.wallet.dto.WalletResponse;
 import com.minh.paymentsystem.wallet.service.WalletService;

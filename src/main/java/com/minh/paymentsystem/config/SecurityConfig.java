@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -19,11 +20,15 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 
 import com.minh.paymentsystem.auth.security.AuthAccessDeniedHandler;
-import com.minh.paymentsystem.auth.security.AuthRequestFilter;
-import com.minh.paymentsystem.auth.security.JwtAuthenticationEntryPoint;
-import com.minh.paymentsystem.auth.security.JwtAuthenticationFilter;
+import com.minh.paymentsystem.auth.security.cors.AuthCorsProcessor;
+import com.minh.paymentsystem.auth.security.csrf.AuthRequestFilter;
+import com.minh.paymentsystem.auth.security.jwt.JwtAuthenticationEntryPoint;
+import com.minh.paymentsystem.auth.security.jwt.JwtAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -75,8 +80,22 @@ public class SecurityConfig {
                         .permitAll()
                         .anyRequest()
                         .authenticated())
+                .addFilterAt(buildCorsFilter(allowedOrigins), CorsFilter.class)
                 .addFilterBefore(new AuthRequestFilter(Set.copyOf(allowedOrigins), authAccessDeniedHandler), CsrfFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
+    }
+
+    private CorsFilter buildCorsFilter(List<String> allowedOrigins) {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(allowedOrigins);
+        configuration.setAllowCredentials(true);
+        configuration.setAllowedMethods(List.of("GET", "HEAD", "POST", "PATCH", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.AUTHORIZATION, AuthRequestFilter.CSRF_HEADER_NAME));
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/v1/**", configuration);
+        CorsFilter filter = new CorsFilter(source);
+        filter.setCorsProcessor(new AuthCorsProcessor(authAccessDeniedHandler));
+        return filter;
     }
 }

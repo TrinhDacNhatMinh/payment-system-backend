@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.auth.security;
+package com.minh.paymentsystem.auth.security.cookie;
 
 import java.time.Duration;
 

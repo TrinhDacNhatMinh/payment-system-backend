@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.auth.security;
+package com.minh.paymentsystem.auth.security.csrf;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -18,6 +18,7 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.minh.paymentsystem.auth.security.AuthAccessDeniedHandler;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 
 @RequiredArgsConstructor

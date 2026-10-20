@@ -1,4 +1,4 @@
-package com.minh.paymentsystem.auth.security;
+package com.minh.paymentsystem.auth.security.user;
 
 import java.util.Collection;
 import java.util.Collections;

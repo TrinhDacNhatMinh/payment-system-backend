@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.minh.paymentsystem.auth.security.CustomUserDetails;
+import com.minh.paymentsystem.auth.security.user.CustomUserDetails;
 import com.minh.paymentsystem.common.response.BaseResponse;
 import com.minh.paymentsystem.payment.dto.DepositRequest;
 import com.minh.paymentsystem.payment.dto.DepositResponse;

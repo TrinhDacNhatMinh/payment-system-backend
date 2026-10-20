@@ -22,6 +22,9 @@ public enum ErrorCode {
 
     ACCOUNT_LOCKED(HttpStatus.FORBIDDEN, "Account is locked"),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "Access denied"),
+    CSRF_TOKEN_MISSING(HttpStatus.FORBIDDEN, "CSRF token is missing"),
+    CSRF_TOKEN_INVALID(HttpStatus.FORBIDDEN, "CSRF token is invalid"),
+    ORIGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "Request origin is not allowed"),
 
     REFRESH_TOKEN_NOT_FOUND(HttpStatus.NOT_FOUND, "Refresh token not found"),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "User not found"),

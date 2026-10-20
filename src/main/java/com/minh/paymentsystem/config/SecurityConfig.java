@@ -1,6 +1,10 @@
 package com.minh.paymentsystem.config;
 
+import java.util.List;
+import java.util.Set;
+
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -12,7 +16,12 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
 
+import com.minh.paymentsystem.auth.security.AuthAccessDeniedHandler;
+import com.minh.paymentsystem.auth.security.AuthRequestFilter;
 import com.minh.paymentsystem.auth.security.JwtAuthenticationEntryPoint;
 import com.minh.paymentsystem.auth.security.JwtAuthenticationFilter;
 
@@ -24,17 +33,38 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final AuthAccessDeniedHandler authAccessDeniedHandler;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    // MVC advice needs this bean while the JWT filter resolves handlerExceptionResolver.
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public static CookieCsrfTokenRepository csrfTokenRepository(@Value("${auth.refresh-token-cookie.secure:true}") boolean secure) {
+        CookieCsrfTokenRepository repository = new CookieCsrfTokenRepository();
+        repository.setCookiePath("/api/v1/auth");
+        repository.setHeaderName(AuthRequestFilter.CSRF_HEADER_NAME);
+        repository.setCookieCustomizer(cookie -> cookie
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite("Lax"));
+        return repository;
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, CookieCsrfTokenRepository csrfTokenRepository,
+            @Value("${auth.allowed-origins:}") List<String> allowedOrigins) throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable)
-                .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(csrfTokenRepository)
+                        .csrfTokenRequestHandler(new XorCsrfTokenRequestAttributeHandler())
+                        .requireCsrfProtectionMatcher(AuthRequestFilter.PROTECTED_REQUESTS))
+                .logout(AbstractHttpConfigurer::disable)
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                        .accessDeniedHandler(authAccessDeniedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
@@ -45,6 +75,7 @@ public class SecurityConfig {
                         .permitAll()
                         .anyRequest()
                         .authenticated())
+                .addFilterBefore(new AuthRequestFilter(Set.copyOf(allowedOrigins), authAccessDeniedHandler), CsrfFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

@@ -29,6 +29,7 @@ jwt:
   refresh-expiration: 604800000 # 7 days
 
 auth:
+  allowed-origins: http://localhost:5173
   refresh-token-cookie:
     secure: false # Local HTTP only; set true when using HTTPS
 

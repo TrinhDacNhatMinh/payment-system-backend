@@ -84,6 +84,7 @@ mvn test
 
 | Method | Endpoint                          | Description                       | Auth  |
 |--------|-----------------------------------|-----------------------------------|-------|
+| GET    | `/api/v1/auth/csrf`               | Get masked CSRF token and HttpOnly cookie | None |
 | POST   | `/api/v1/auth/register`           | Register a new user               | None  |
 | POST   | `/api/v1/auth/login`              | Return access token and set refresh cookie | None |
 | POST   | `/api/v1/auth/refresh`            | Rotate tokens using refresh cookie | Refresh cookie |
@@ -127,6 +128,7 @@ Configure cookie transport in your local `application.yaml`:
 
 ```yaml
 auth:
+  allowed-origins: http://localhost:5173
   refresh-token-cookie:
     secure: false # Local HTTP only; use true with HTTPS
 ```
@@ -137,7 +139,21 @@ Refresh and logout accept the `refresh_token` cookie and do not require a reques
 
 A missing or blank refresh cookie returns HTTP 401 with `REFRESH_TOKEN_MISSING`. Existing expired, revoked, and unknown-token errors remain unchanged. Logout still accepts an expired token that exists and is not revoked; repeated logout is not yet idempotent. Access tokens already issued remain valid until expiration.
 
-Browser clients should use `credentials: "include"` for cross-origin auth requests and must not read or store the refresh token in JavaScript. Cross-origin credentials also require the planned CORS configuration; CSRF protection, Origin checks, and concurrent-session serialization are separate follow-up work and are not implemented by this cookie change.
+Browser clients should use `credentials: "include"` for cross-origin auth requests and must not read or store the refresh token in JavaScript. Credentialed CORS and concurrent-session serialization remain follow-up work.
+
+### CSRF and Origin checks
+
+Before POST register/login/refresh/logout, call `GET /api/v1/auth/csrf` without a bearer token. Its `BaseResponse.data` contains `{ "headerName": "X-XSRF-TOKEN", "token": "<masked-token>" }`. Keep the token in memory and send it in the named header, together with the matching cookie. JavaScript must use the JSON token, not the raw cookie value.
+
+The `XSRF-TOKEN` repository cookie is HttpOnly, host-only, `Path=/api/v1/auth`, `SameSite=Lax`, and a session cookie. Its Secure flag follows `auth.refresh-token-cookie.secure`. The endpoint resolves the deferred token and uses `Cache-Control: no-store`; it does not create an HTTP session.
+
+All four auth POSTs require an exact `Origin` from `auth.allowed-origins` (comma-separated values for multiple origins). An absent allowlist rejects all auth POST origins. Missing, `null`, or unlisted origins return HTTP 403 `ORIGIN_NOT_ALLOWED`. A missing/blank CSRF header or missing repository cookie returns `CSRF_TOKEN_MISSING`; an invalid/mismatched masked token returns `CSRF_TOKEN_INVALID`. Errors use `BaseResponse` and occur before the auth service runs. API clients such as Swagger/Postman must also supply Origin, the CSRF header, and cookies.
+
+Browsers set Origin automatically. To test auth POSTs from local Swagger UI hosted at `http://localhost:8080`, explicitly add that origin to the local allowlist and supply the JSON CSRF token in the documented header. The example only allows the frontend origin `http://localhost:5173`.
+
+Successful login/logout delete the old CSRF cookie; fetch a fresh token before the next auth POST. Refresh preserves the CSRF cookie. Rejected Origin/CSRF checks do not revoke refresh tokens or clear the refresh cookie. Auth POST responses use `Cache-Control: no-store`. Bearer business endpoints and VNPay callbacks do not require this CSRF token.
+
+This changes the auth request contract: clients that omit CSRF/Origin will now receive 403. Browser integration from port 5173 still requires the separate CORS task, including credentialed preflight and error response headers. New CSRF tests have been added but have not been executed; earlier test counts below do not validate this change.
 
 ## Project Structure
 

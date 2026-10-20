@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,12 +18,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.minh.paymentsystem.auth.dto.AuthResponse;
@@ -456,37 +460,37 @@ public class AuthServiceImplTest {
     @DisplayName("logout()")
     class LogoutTests {
 
-        @Test
-        void shouldRejectMissingLogoutTokenBeforeLoadingToken() {
-            BusinessException exception = assertThrows(BusinessException.class, () -> authService.logout(null));
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {
+                " ",
+                "\t"
+        })
+        void shouldClearCookieWithoutLookupWhenLogoutTokenIsMissingOrBlank(String token) {
+            when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
 
-            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_MISSING);
-            verifyNoInteractions(refreshTokenService, jwtTokenProvider, refreshTokenCookieProvider);
+            assertThat(authService.logout(token)).isEqualTo("cleared-cookie-header");
+
+            verifyNoInteractions(refreshTokenService, jwtTokenProvider);
+            verify(refreshTokenCookieProvider).clearCookie();
         }
 
         @Test
-        void shouldRejectBlankLogoutTokenBeforeLoadingToken() {
-            BusinessException exception = assertThrows(BusinessException.class, () -> authService.logout(" "));
+        void shouldClearCookieWhenLogoutTokenIsNotFound() {
+            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.empty());
+            when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
 
-            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_MISSING);
-            verifyNoInteractions(refreshTokenService, jwtTokenProvider, refreshTokenCookieProvider);
-        }
+            assertThat(authService.logout(refreshToken)).isEqualTo("cleared-cookie-header");
 
-        @Test
-        void logout_tokenNotFound_throwsBusinessException() {
-            // given
-            when(refreshTokenService.getToken(refreshToken))
-                    .thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
-
-            // when & then
-            BusinessException ex = assertThrows(BusinessException.class, () -> authService.logout(refreshToken));
-            assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+            verify(refreshTokenService, never()).revokeAllUserTokens(any());
+            verify(refreshTokenCookieProvider).clearCookie();
+            verifyNoInteractions(jwtTokenProvider);
         }
 
         @Test
         void logout_validToken_revokesAllUserTokens() {
             // given
-            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
+            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.of(validRefreshToken));
             when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
 
             // when
@@ -503,7 +507,7 @@ public class AuthServiceImplTest {
         @Test
         void logout_expiredToken_stillRevokesAllUserTokens() {
             validRefreshToken.setExpiresAt(Instant.now().minusSeconds(60));
-            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
+            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.of(validRefreshToken));
 
             authService.logout(refreshToken);
 
@@ -513,15 +517,67 @@ public class AuthServiceImplTest {
         }
 
         @Test
-        void logout_revokedToken_returnsRevokedError() {
+        void shouldClearCookieWithoutRevokingNewSessionsWhenLogoutTokenIsRevoked() {
             validRefreshToken.setRevoked(true);
-            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
+            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.of(validRefreshToken));
+            when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
 
-            BusinessException exception = assertThrows(BusinessException.class, () -> authService.logout(refreshToken));
+            assertThat(authService.logout(refreshToken)).isEqualTo("cleared-cookie-header");
 
-            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_REVOKED);
             verify(refreshTokenService, never()).revokeAllUserTokens(any());
-            verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
+            verify(refreshTokenCookieProvider).clearCookie();
+            verifyNoInteractions(jwtTokenProvider);
+        }
+
+        @Test
+        void shouldRevokeTokensOnlyOnceWhenLogoutIsRepeated() {
+            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.of(validRefreshToken));
+            when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
+            doAnswer(invocation -> {
+                validRefreshToken.setRevoked(true);
+                return null;
+            }).when(refreshTokenService).revokeAllUserTokens(user);
+
+            assertThat(authService.logout(refreshToken)).isEqualTo("cleared-cookie-header");
+            assertThat(authService.logout(refreshToken)).isEqualTo("cleared-cookie-header");
+
+            verify(refreshTokenService).revokeAllUserTokens(user);
+            verify(refreshTokenCookieProvider, times(2)).clearCookie();
+            verifyNoInteractions(jwtTokenProvider);
+        }
+
+        @Test
+        void shouldPropagateLookupFailureWithoutClearingCookie() {
+            DataAccessResourceFailureException failure = new DataAccessResourceFailureException("Database unavailable");
+            when(refreshTokenService.findToken(refreshToken)).thenThrow(failure);
+
+            assertThat(assertThrows(DataAccessResourceFailureException.class, () -> authService.logout(refreshToken)))
+                    .isSameAs(failure);
+
+            verify(refreshTokenService, never()).revokeAllUserTokens(any());
+            verifyNoInteractions(refreshTokenCookieProvider, jwtTokenProvider);
+        }
+
+        @Test
+        void shouldPropagateRevocationFailureWithoutClearingCookie() {
+            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.of(validRefreshToken));
+            DataAccessResourceFailureException failure = new DataAccessResourceFailureException("Database unavailable");
+            doThrow(failure).when(refreshTokenService).revokeAllUserTokens(user);
+
+            assertThat(assertThrows(DataAccessResourceFailureException.class, () -> authService.logout(refreshToken)))
+                    .isSameAs(failure);
+
+            verifyNoInteractions(refreshTokenCookieProvider, jwtTokenProvider);
+        }
+
+        @Test
+        void shouldPropagateUnrelatedBusinessErrorsWithoutClearingCookie() {
+            BusinessException failure = new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+            when(refreshTokenService.findToken(refreshToken)).thenThrow(failure);
+
+            assertThat(assertThrows(BusinessException.class, () -> authService.logout(refreshToken))).isSameAs(failure);
+
+            verifyNoInteractions(refreshTokenCookieProvider, jwtTokenProvider);
         }
     }
 

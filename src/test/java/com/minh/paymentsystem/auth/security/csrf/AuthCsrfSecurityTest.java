@@ -3,6 +3,7 @@ package com.minh.paymentsystem.auth.security.csrf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -278,6 +280,56 @@ class AuthCsrfSecurityTest {
         assertClearedCsrfCookie(result);
         assertThat(result.getResponse().getCookie("refresh_token").getMaxAge()).isZero();
         verify(authService).logout("session-refresh");
+    }
+
+    @Test
+    void shouldClearBothCookiesWhenRefreshCookieIsMissing() throws Exception {
+        CsrfSession session = getCsrfSession();
+        when(authService.logout(null)).thenReturn(new RefreshTokenCookieProvider(false).clearCookie());
+
+        MvcResult result = mvc.perform(post(AUTH_PATH + "/logout")
+                .servletPath(AUTH_PATH + "/logout")
+                .cookie(session.cookie())
+                .header(HttpHeaders.ORIGIN, ORIGIN)
+                .header(AuthRequestFilter.CSRF_HEADER_NAME, session.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andReturn();
+
+        assertClearedCsrfCookie(result);
+        assertThat(result.getResponse().getCookie("refresh_token").getMaxAge()).isZero();
+        verify(authService).logout(null);
+    }
+
+    @Test
+    void shouldAllowRepeatedLogoutWithFreshCsrfToken() throws Exception {
+        when(authService.logout("session-refresh")).thenReturn(new RefreshTokenCookieProvider(false).clearCookie());
+        CsrfSession first = getCsrfSession();
+        mvc.perform(authPost("logout").cookie(first.cookie())
+                .header(AuthRequestFilter.CSRF_HEADER_NAME, first.token()))
+                .andExpect(status().isOk());
+
+        CsrfSession second = getCsrfSession();
+        MvcResult result = mvc.perform(authPost("logout").cookie(second.cookie())
+                .header(AuthRequestFilter.CSRF_HEADER_NAME, second.token()))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertClearedCsrfCookie(result);
+        assertThat(result.getResponse().getCookie("refresh_token").getMaxAge()).isZero();
+        verify(authService, times(2)).logout("session-refresh");
+    }
+
+    @Test
+    void shouldNotClearCookiesWhenLogoutFails() throws Exception {
+        CsrfSession session = getCsrfSession();
+        when(authService.logout("session-refresh")).thenThrow(new DataAccessResourceFailureException("Database unavailable"));
+
+        mvc.perform(authPost("logout").cookie(session.cookie())
+                .header(AuthRequestFilter.CSRF_HEADER_NAME, session.token()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+                .andExpect(jsonPath("$.error.code").value("INTERNAL_SERVER_ERROR"));
     }
 
     @Test

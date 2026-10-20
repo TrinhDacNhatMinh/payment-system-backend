@@ -2,6 +2,7 @@ package com.minh.paymentsystem.user.service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,8 +39,14 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional(readOnly = true)
     public RefreshToken getToken(String token) {
-        return refreshTokenRepository.findByToken(token)
+        return findToken(token)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<RefreshToken> findToken(String token) {
+        return refreshTokenRepository.findByToken(token);
     }
 
     @Override

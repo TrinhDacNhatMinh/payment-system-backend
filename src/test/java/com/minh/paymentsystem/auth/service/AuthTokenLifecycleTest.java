@@ -85,6 +85,39 @@ class AuthTokenLifecycleTest {
         assertThat(refreshTokenRepository.findById(expired.getId()).orElseThrow().isRevoked()).isTrue();
     }
 
+    @Test
+    void shouldKeepNewSessionActiveWhenLogoutWithOldRevokedTokenIsRepeated() {
+        User user = createUser("repeat-logout@test.com");
+        AuthResponse login = authService.login(new LoginRequest(user.getEmail(), "password123"));
+        String oldToken = HttpCookie.parse(login.cookie()).get(0).getValue();
+        String firstCookie = authService.logout(oldToken);
+        AuthResponse newLogin = authService.login(new LoginRequest(user.getEmail(), "password123"));
+        String newToken = HttpCookie.parse(newLogin.cookie()).get(0).getValue();
+
+        String repeatedCookie = authService.logout(oldToken);
+        refreshTokenRepository.flush();
+
+        assertThat(HttpCookie.parse(firstCookie).get(0).getMaxAge()).isZero();
+        assertThat(HttpCookie.parse(repeatedCookie).get(0).getMaxAge()).isZero();
+        assertThat(refreshTokenRepository.findAllByUserAndRevokedFalse(user))
+                .extracting(RefreshToken::getToken)
+                .containsExactly(newToken);
+    }
+
+    @Test
+    void shouldClearCookieWhenRefreshTokenHasBeenDeleted() {
+        User user = createUser("deleted-token@test.com");
+        AuthResponse login = authService.login(new LoginRequest(user.getEmail(), "password123"));
+        String token = HttpCookie.parse(login.cookie()).get(0).getValue();
+        refreshTokenRepository.delete(refreshTokenRepository.findByToken(token).orElseThrow());
+        refreshTokenRepository.flush();
+
+        String cookie = authService.logout(token);
+
+        assertThat(HttpCookie.parse(cookie).get(0).getMaxAge()).isZero();
+        assertThat(refreshTokenRepository.findAllByUserAndRevokedFalse(user)).isEmpty();
+    }
+
     private User createUser(String email) {
         return userRepository.save(User.builder()
                 .email(email)

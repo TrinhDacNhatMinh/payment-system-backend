@@ -87,13 +87,16 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public String logout(String refreshToken) {
         log.debug("Processing logout request");
-        RefreshToken token = getRefreshToken(refreshToken);
-        if (token.isRevoked()) {
-            throw new BusinessException(ErrorCode.REFRESH_TOKEN_REVOKED);
+        if (!StringUtils.hasText(refreshToken)) {
+            return refreshTokenCookieProvider.clearCookie();
         }
-        User user = token.getUser();
-        refreshTokenService.revokeAllUserTokens(user);
-        log.info("Logout processed: userId={}", user.getId());
+        refreshTokenService.findToken(refreshToken)
+                .filter(token -> !token.isRevoked())
+                .ifPresent(token -> {
+                    User user = token.getUser();
+                    refreshTokenService.revokeAllUserTokens(user);
+                    log.info("Logout processed: userId={}", user.getId());
+                });
         return refreshTokenCookieProvider.clearCookie();
     }
 

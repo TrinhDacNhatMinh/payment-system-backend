@@ -122,14 +122,13 @@ public class AuthController {
                 .body(BaseResponse.success(response));
     }
 
-    @Operation(summary = "Logout", description = "Reads the refresh_token cookie; no request body is required. Revokes all refresh tokens for the user and clears the cookie on success. The token may be expired but must exist and must not be revoked. Existing access tokens remain valid until expiration.")
+    @Operation(summary = "Logout", description = "Reads the optional refresh_token cookie; no request body is required. Revokes all refresh tokens for the user when the supplied token exists and is not revoked, even if expired. Missing, empty, unknown, or already revoked tokens also return success and clear the refresh and CSRF cookies. Requires an allowed Origin and valid CSRF token; obtain a new CSRF token before repeating logout. Existing access tokens remain valid until expiration.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully logged out", headers = {
                     @Header(name = HttpHeaders.SET_COOKIE, description = "Clears refresh_token and XSRF-TOKEN using Max-Age=0 and their original cookie scope", schema = @Schema(type = "string"))
             }),
-            @ApiResponse(responseCode = "401", description = "Refresh token cookie missing, empty, or revoked"),
             @ApiResponse(responseCode = "403", description = "CSRF_TOKEN_MISSING, CSRF_TOKEN_INVALID, or ORIGIN_NOT_ALLOWED"),
-            @ApiResponse(responseCode = "404", description = "Refresh token not found")
+            @ApiResponse(responseCode = "500", description = "Logout failed due to a system error; cookies are not cleared")
     })
     @Parameters({
             @Parameter(name = "Origin", in = ParameterIn.HEADER, required = true, description = "Exact frontend origin configured in auth.allowed-origins", example = "http://localhost:5173"),
@@ -137,7 +136,7 @@ public class AuthController {
     })
     @PostMapping("/logout")
     public ResponseEntity<BaseResponse<Void>> logout(
-            @Parameter(required = true, description = "HttpOnly refresh token cookie identifying the session to revoke") @CookieValue(name = RefreshTokenCookieProvider.COOKIE_NAME, required = false) String refreshToken) {
+            @Parameter(description = "Optional HttpOnly refresh token cookie; logout succeeds when the session has already ended") @CookieValue(name = RefreshTokenCookieProvider.COOKIE_NAME, required = false) String refreshToken) {
         String cookie = authService.logout(refreshToken);
         return ResponseEntity
                 .status(HttpStatus.OK)

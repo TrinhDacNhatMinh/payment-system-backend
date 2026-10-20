@@ -104,9 +104,8 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "Token refreshed successfully", headers = {
                     @Header(name = HttpHeaders.SET_COOKIE, description = "Replaces the HttpOnly refresh_token cookie", schema = @Schema(type = "string"))
             }),
-            @ApiResponse(responseCode = "401", description = "Refresh token cookie missing, empty, expired, or revoked"),
+            @ApiResponse(responseCode = "401", description = "REFRESH_TOKEN_MISSING, REFRESH_TOKEN_EXPIRED, REFRESH_TOKEN_REVOKED, or REFRESH_TOKEN_NOT_FOUND. Clear client session state, show login, and do not retry refresh with this token."),
             @ApiResponse(responseCode = "403", description = "Account locked, CSRF_TOKEN_MISSING, CSRF_TOKEN_INVALID, or ORIGIN_NOT_ALLOWED"),
-            @ApiResponse(responseCode = "404", description = "Refresh token not found"),
             @ApiResponse(responseCode = "409", description = "AUTH_SESSION_BUSY: session lock could not be acquired; no tokens are issued")
     })
     @Parameters({

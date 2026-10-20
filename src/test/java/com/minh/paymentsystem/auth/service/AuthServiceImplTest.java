@@ -389,6 +389,7 @@ public class AuthServiceImplTest {
             BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(refreshToken));
 
             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+            assertThat(exception.getErrorCode().getHttpStatus().value()).isEqualTo(401);
             verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
         }
 
@@ -445,6 +446,7 @@ public class AuthServiceImplTest {
             BusinessException ex = assertThrows(BusinessException.class,
                     () -> authService.refresh(refreshToken));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+            assertThat(ex.getErrorCode().getHttpStatus().value()).isEqualTo(401);
             verifyNoInteractions(userService, jwtTokenProvider, refreshTokenCookieProvider);
         }
 

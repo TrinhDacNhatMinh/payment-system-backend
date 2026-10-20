@@ -19,6 +19,7 @@ public enum ErrorCode {
     REFRESH_TOKEN_MISSING(HttpStatus.UNAUTHORIZED, "Refresh token cookie is missing"),
     REFRESH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "Refresh token has expired"),
     REFRESH_TOKEN_REVOKED(HttpStatus.UNAUTHORIZED, "Refresh token has been revoked"),
+    REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "Refresh token not found"),
 
     ACCOUNT_LOCKED(HttpStatus.FORBIDDEN, "Account is locked"),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "Access denied"),
@@ -26,7 +27,6 @@ public enum ErrorCode {
     CSRF_TOKEN_INVALID(HttpStatus.FORBIDDEN, "CSRF token is invalid"),
     ORIGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "Request origin is not allowed"),
 
-    REFRESH_TOKEN_NOT_FOUND(HttpStatus.NOT_FOUND, "Refresh token not found"),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "User not found"),
     WALLET_NOT_FOUND(HttpStatus.NOT_FOUND, "Wallet not found"),
     RECIPIENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Recipient not found"),

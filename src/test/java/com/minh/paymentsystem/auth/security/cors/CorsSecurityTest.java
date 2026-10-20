@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -223,6 +224,33 @@ class CorsSecurityTest {
         assertThat(result.getResponse().getCookie("refresh_token").isHttpOnly()).isTrue();
         assertThat(result.getResponse().getCookie("XSRF-TOKEN").getMaxAge()).isZero();
         verify(authService).login(any());
+    }
+
+    @Test
+    void shouldReturn401WithStableCodeWhenRefreshTokenIsNotFound() throws Exception {
+        MvcResult csrfResult = mvc.perform(get(CSRF_PATH).header(HttpHeaders.ORIGIN, ORIGIN))
+                .andExpect(status().isOk())
+                .andReturn();
+        String csrfToken = objectMapper.readTree(csrfResult.getResponse().getContentAsString())
+                .path("data")
+                .path("token")
+                .asText();
+        when(authService.refresh("unknown-refresh-token"))
+                .thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+
+        mvc.perform(post("/api/v1/auth/refresh")
+                .header(HttpHeaders.ORIGIN, ORIGIN)
+                .header(AuthRequestFilter.CSRF_HEADER_NAME, csrfToken)
+                .cookie(csrfResult.getResponse().getCookie("XSRF-TOKEN"), new Cookie("refresh_token", "unknown-refresh-token")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("REFRESH_TOKEN_NOT_FOUND"));
+
+        verify(authService).refresh("unknown-refresh-token");
+        verifyNoMoreInteractions(authService);
     }
 
     @Test

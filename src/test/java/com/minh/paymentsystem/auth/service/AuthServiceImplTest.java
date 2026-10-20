@@ -8,11 +8,15 @@ import static org.mockito.Mockito.*;
 import java.time.Duration;
 import java.time.Instant;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
@@ -295,9 +299,11 @@ public class AuthServiceImplTest {
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS);
         }
 
-        @Test
-        void login_validCredentials_returnsTokensAndRevokesOldTokens() {
+        @ParameterizedTest
+        @EnumSource(Role.class)
+        void login_validCredentials_returnsTokensAndRevokesOldTokens(Role role) {
             // given
+            user.setRole(role);
             when(userService.getUserByEmail(loginRequest.email())).thenReturn(user);
             when(passwordEncoder.matches(loginRequest.password(), user.getPassword())).thenReturn(true);
 
@@ -329,6 +335,7 @@ public class AuthServiceImplTest {
                     beforeLogin.plus(Duration.ofDays(7)), Instant.now().plus(Duration.ofDays(7)));
             assertThat(response.tokenType()).isEqualTo("Bearer");
             assertThat(response.expiresIn()).isEqualTo(3600L);
+            assertSessionUser(response, role);
         }
     }
 
@@ -407,9 +414,11 @@ public class AuthServiceImplTest {
             verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
         }
 
-        @Test
-        void refresh_validToken_revokesOldTokensAndReturnsNewPair() {
+        @ParameterizedTest
+        @EnumSource(Role.class)
+        void refresh_validToken_revokesOldTokensAndReturnsNewPair(Role role) {
             // given
+            user.setRole(role);
             when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
             when(jwtTokenProvider.generateAccessToken(user))
                     .thenReturn("new-access-token");
@@ -428,6 +437,7 @@ public class AuthServiceImplTest {
             verify(refreshTokenCookieProvider).createCookie("rotated-refresh-token", Duration.ofDays(7));
             assertThat(response.tokenType()).isEqualTo("Bearer");
             assertThat(response.expiresIn()).isEqualTo(3600L);
+            assertSessionUser(response, role);
             ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);
             InOrder order = inOrder(refreshTokenService);
             order.verify(refreshTokenService).getToken(refreshToken);
@@ -515,4 +525,18 @@ public class AuthServiceImplTest {
         }
     }
 
+    private void assertSessionUser(AuthResponse response, Role expectedRole) {
+        assertThat(response.user().id()).isEqualTo(user.getId());
+        assertThat(response.user().email()).isEqualTo(user.getEmail());
+        assertThat(response.user().role()).isEqualTo(expectedRole);
+
+        JsonNode json = new ObjectMapper().valueToTree(response);
+        assertThat(json.size()).isEqualTo(4);
+        assertThat(json.has("cookie")).isFalse();
+        assertThat(json.has("refreshToken")).isFalse();
+        assertThat(json.get("user").size()).isEqualTo(3);
+        assertThat(json.get("user").get("id").longValue()).isEqualTo(user.getId());
+        assertThat(json.get("user").get("email").textValue()).isEqualTo(user.getEmail());
+        assertThat(json.get("user").get("role").textValue()).isEqualTo(expectedRole.name());
+    }
 }

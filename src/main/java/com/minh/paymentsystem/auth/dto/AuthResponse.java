@@ -13,6 +13,9 @@ public record AuthResponse(
         @Schema(description = "Access token expiration time in seconds", example = "3600")
         long expiresIn,
 
+        @Schema(description = "Authenticated user for this session")
+        AuthUserResponse user,
+
         @Schema(hidden = true)
         @JsonIgnore
         String cookie) {

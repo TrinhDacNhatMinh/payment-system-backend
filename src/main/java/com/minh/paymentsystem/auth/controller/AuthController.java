@@ -50,7 +50,7 @@ public class AuthController {
                 .body(BaseResponse.success(response));
     }
 
-    @Operation(summary = "Login", description = "Authenticates the user and revokes all existing refresh tokens. Returns the access token in JSON and sets the refresh token in an HttpOnly cookie. Existing access tokens remain valid until expiration.")
+    @Operation(summary = "Login", description = "Authenticates the user and revokes all existing refresh tokens. Returns accessToken, tokenType, expiresIn in seconds, and user { id, email, role } in JSON, and sets the refresh token in an HttpOnly cookie. Existing access tokens remain valid until expiration.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully authenticated", headers = {
                     @Header(name = HttpHeaders.SET_COOKIE, description = "HttpOnly refresh_token cookie with Path=/api/v1/auth and SameSite=Lax", schema = @Schema(type = "string"))
@@ -69,7 +69,7 @@ public class AuthController {
                 .body(BaseResponse.success(response));
     }
 
-    @Operation(summary = "Refresh token", description = "Reads the refresh_token cookie; no request body is required. Revokes all existing refresh tokens, returns a new access token in JSON, and replaces the HttpOnly refresh cookie. Locked accounts cannot refresh tokens.")
+    @Operation(summary = "Refresh token", description = "Reads the refresh_token cookie; no request body is required. Revokes all existing refresh tokens, returns accessToken, tokenType, expiresIn in seconds, and the current user { id, email, role } in JSON, and replaces the HttpOnly refresh cookie. Locked accounts cannot refresh tokens.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Token refreshed successfully", headers = {
                     @Header(name = HttpHeaders.SET_COOKIE, description = "Replaces the HttpOnly refresh_token cookie", schema = @Schema(type = "string"))

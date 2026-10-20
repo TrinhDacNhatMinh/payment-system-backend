@@ -100,7 +100,24 @@ mvn test
 
 ### Refresh token cookie
 
-Login accepts the existing email/password JSON request. Its JSON response contains only `accessToken`, `tokenType`, and `expiresIn` inside `data`. The refresh token is sent exclusively in the `Set-Cookie` header, not in JSON.
+Login accepts the existing email/password JSON request. Login and refresh return `accessToken`, `tokenType`, `expiresIn` in seconds, and `user: { id, email, role }` inside `data`. The user fields come from the authenticated user in the service. No separate profile endpoint is required, and this session response does not include fullName, status, or password. The refresh token is sent exclusively in the `Set-Cookie` header, not in JSON.
+
+Example login/refresh data:
+
+```json
+{
+  "accessToken": "<jwt>",
+  "tokenType": "Bearer",
+  "expiresIn": 1800,
+  "user": {
+    "id": 1,
+    "email": "user@example.com",
+    "role": "USER"
+  }
+}
+```
+
+The frontend can use `user` to display the current session. The backend remains responsible for authorization; displaying a role in the UI does not grant permissions.
 
 The service returns an `AuthResponse` containing the prepared cookie header value. Its `cookie` component is annotated with `@JsonIgnore` and hidden from the OpenAPI schema; the controller uses `response.cookie()` only for `Set-Cookie`. Cookie creation and deletion are handled by `RefreshTokenCookieProvider`.
 

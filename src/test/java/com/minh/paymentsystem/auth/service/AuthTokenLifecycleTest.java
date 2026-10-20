@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.auth.dto.AuthResponse;
+import com.minh.paymentsystem.auth.dto.AuthUserResponse;
 import com.minh.paymentsystem.auth.dto.LoginRequest;
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
@@ -52,6 +53,8 @@ class AuthTokenLifecycleTest {
         String refreshedToken = HttpCookie.parse(refreshed.cookie()).get(0).getValue();
         refreshTokenRepository.flush();
 
+        assertThat(login.user()).isEqualTo(new AuthUserResponse(user.getId(), user.getEmail(), Role.USER));
+        assertThat(refreshed.user()).isEqualTo(login.user());
         assertThat(refreshedToken).isNotEqualTo(loginRefreshToken);
         assertThat(refreshTokenRepository.findByToken(loginRefreshToken).orElseThrow().isRevoked()).isTrue();
         assertThat(refreshTokenRepository.findById(otherToken.getId()).orElseThrow().isRevoked()).isTrue();

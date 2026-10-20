@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.minh.paymentsystem.auth.dto.AuthResponse;
+import com.minh.paymentsystem.auth.dto.AuthUserResponse;
 import com.minh.paymentsystem.auth.dto.LoginRequest;
 import com.minh.paymentsystem.auth.dto.RegisterRequest;
 import com.minh.paymentsystem.auth.security.JwtTokenProvider;
@@ -166,6 +167,7 @@ public class AuthServiceImpl implements AuthService {
                 accessToken,
                 "Bearer",
                 jwtTokenProvider.getAccessExpiration() / 1000,
+                AuthUserResponse.from(user),
                 cookie);
     }
 

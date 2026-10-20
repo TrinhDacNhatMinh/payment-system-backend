@@ -137,9 +137,9 @@ Secure defaults to `true` when this setting is absent. The configuration example
 
 Refresh and logout accept the `refresh_token` cookie and do not require a request body. The old `{"refreshToken":"..."}` JSON body is no longer used. Refresh rotates the token and replaces the cookie. Successful logout revokes the user's refresh tokens and expires the cookie with the same name and scope and `Max-Age=0`.
 
-Refresh still returns HTTP 401 `REFRESH_TOKEN_MISSING` for a missing/blank cookie and keeps its expired, revoked, and unknown-token errors. Logout returns HTTP 200 and clears cookies when the token is missing, blank, unknown, or already revoked. An existing, unrevoked token causes all refresh tokens for its user to be revoked, even if that token has expired. A previously revoked token does not revoke a newer session. Database/system failures remain errors and do not clear cookies. Access tokens already issued remain valid until expiration. Concurrent login/refresh/logout serialization remains a separate task.
+Refresh still returns HTTP 401 `REFRESH_TOKEN_MISSING` for a missing/blank cookie and keeps its expired, revoked, and unknown-token errors. Logout returns HTTP 200 and clears cookies when the token is missing, blank, unknown, or already revoked. An existing, unrevoked token causes all refresh tokens for its user to be revoked, even if that token has expired. A previously revoked token does not revoke a newer session. Database/system failures remain errors and do not clear cookies. Access tokens already issued remain valid until expiration.
 
-Browser clients should use `credentials: "include"` for cross-origin auth requests and must not read or store the refresh token in JavaScript. CORS now uses the same `auth.allowed-origins` allowlist as the auth Origin checks. Concurrent-session serialization remains follow-up work.
+Browser clients should use `credentials: "include"` for cross-origin auth requests and must not read or store the refresh token in JavaScript. CORS uses the same `auth.allowed-origins` allowlist as the auth Origin checks.
 
 ### CSRF and Origin checks
 
@@ -154,6 +154,16 @@ Browsers set Origin automatically. To test auth POSTs from local Swagger UI host
 Successful login/logout delete the old CSRF cookie; fetch a fresh token before the next auth POST, including a repeated logout. Refresh preserves the CSRF cookie. Rejected Origin/CSRF checks do not revoke refresh tokens or clear the refresh cookie; repeatable logout does not bypass these checks. Auth POST responses use `Cache-Control: no-store`. Bearer business endpoints and VNPay callbacks do not require this CSRF token.
 
 This changes the auth request contract: clients that omit CSRF/Origin will now receive 403. CORS for `/api/v1/**` allows credentials from configured origins (local: `http://localhost:5173`), methods GET/HEAD/POST/PATCH/OPTIONS, and request headers Content-Type/Authorization/X-XSRF-TOKEN. Valid preflight is handled before authentication and CSRF. API errors for an allowed origin retain CORS headers; unlisted origins receive no CORS access. Origin rejections use `ORIGIN_NOT_ALLOWED`; unsupported CORS methods/headers use `ACCESS_DENIED`, both in `BaseResponse`. Set-Cookie is not exposed to JavaScript. New CSRF/CORS tests have been added but have not been executed, and browser integration is unverified; earlier test counts below do not validate these changes.
+
+### Concurrent session changes
+
+Login, refresh, and logout use READ_COMMITTED transactions and serialize session changes using a database `PESSIMISTIC_WRITE` lock on the owning user row, held until the auth transaction commits or rolls back. Different users use different rows. The user service requires an existing transaction for these locking reads and refreshes the user entity after acquiring the lock to avoid stale persistence-context data. Callers that wrap auth operations in an existing transaction must also use READ_COMMITTED so the token recheck can see changes committed while waiting for the lock.
+
+Refresh/logout first read a token-state projection to identify the user, then read the projection again after acquiring the user lock. Decisions about revocation and expiry use the second read. Projections bypass cached token entities. A second refresh of the same token is rejected once the first transaction revokes it; logout with that old token remains successful without revoking the new session.
+
+The locking queries use a 5000 ms JPA query timeout. Lock acquisition failures and query timeouts at the locking boundary map to HTTP 409 `AUTH_SESSION_BUSY`, preserve the cause internally, and do not issue tokens or clear cookies. Other database errors retain normal error handling. The timeout and concurrency behavior still require execution against PostgreSQL to verify.
+
+Database locks do not order HTTP responses or browser Set-Cookie processing. The frontend must still coordinate auth requests across tabs. New PostgreSQL concurrency coverage is in `AuthSessionConcurrencyIT`, using Testcontainers and independent transactions. This IT is run explicitly with `mvn -Dtest=AuthSessionConcurrencyIT test` and requires Docker; it is not part of the default Surefire test-name patterns. Tests and formatting have not been run for this change.
 
 ## Project Structure
 

@@ -26,7 +26,9 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.minh.paymentsystem.auth.dto.AuthResponse;
@@ -36,6 +38,7 @@ import com.minh.paymentsystem.auth.security.cookie.RefreshTokenCookieProvider;
 import com.minh.paymentsystem.auth.security.jwt.JwtTokenProvider;
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.user.dto.RefreshTokenState;
 import com.minh.paymentsystem.user.dto.UserResponse;
 import com.minh.paymentsystem.user.entity.RefreshToken;
 import com.minh.paymentsystem.user.entity.Role;
@@ -233,9 +236,21 @@ public class AuthServiceImplTest {
     class LoginTests {
 
         @Test
+        void shouldReturnSessionBusyWhenLoginLockTimesOut() {
+            QueryTimeoutException failure = new QueryTimeoutException("Lock query timed out");
+            when(userService.getUserByEmailForSessionUpdate(loginRequest.email())).thenThrow(failure);
+
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.login(loginRequest));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_SESSION_BUSY);
+            assertThat(exception.getCause()).isSameAs(failure);
+            verifyNoInteractions(passwordEncoder, refreshTokenService, jwtTokenProvider, refreshTokenCookieProvider);
+        }
+
+        @Test
         void login_invalidCredentials_throwsBusinessException() {
             // given
-            when(userService.getUserByEmail(loginRequest.email()))
+            when(userService.getUserByEmailForSessionUpdate(loginRequest.email()))
                     .thenThrow(new BusinessException(ErrorCode.INVALID_CREDENTIALS));
 
             // when & then
@@ -246,7 +261,7 @@ public class AuthServiceImplTest {
         @Test
         void login_userNotFound_returnsInvalidCredentials() {
             BusinessException original = new BusinessException(ErrorCode.USER_NOT_FOUND);
-            when(userService.getUserByEmail(loginRequest.email()))
+            when(userService.getUserByEmailForSessionUpdate(loginRequest.email()))
                     .thenThrow(original);
 
             BusinessException exception = assertThrows(BusinessException.class, () -> authService.login(loginRequest));
@@ -259,7 +274,7 @@ public class AuthServiceImplTest {
         @Test
         void login_otherBusinessError_propagatesOriginalException() {
             BusinessException original = new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
-            when(userService.getUserByEmail(loginRequest.email())).thenThrow(original);
+            when(userService.getUserByEmailForSessionUpdate(loginRequest.email())).thenThrow(original);
 
             BusinessException exception = assertThrows(BusinessException.class, () -> authService.login(loginRequest));
 
@@ -271,7 +286,7 @@ public class AuthServiceImplTest {
         void login_accountLocked_throwsBusinessException() {
             // given
             user.setStatus(UserStatus.LOCKED);
-            when(userService.getUserByEmail(loginRequest.email())).thenReturn(user);
+            when(userService.getUserByEmailForSessionUpdate(loginRequest.email())).thenReturn(user);
             when(passwordEncoder.matches(loginRequest.password(), user.getPassword())).thenReturn(true);
 
             // when & then
@@ -283,7 +298,7 @@ public class AuthServiceImplTest {
         @Test
         void login_lockedAccountWithWrongPassword_returnsInvalidCredentials() {
             user.setStatus(UserStatus.LOCKED);
-            when(userService.getUserByEmail(loginRequest.email())).thenReturn(user);
+            when(userService.getUserByEmailForSessionUpdate(loginRequest.email())).thenReturn(user);
             when(passwordEncoder.matches(loginRequest.password(), user.getPassword())).thenReturn(false);
 
             BusinessException exception = assertThrows(BusinessException.class, () -> authService.login(loginRequest));
@@ -295,7 +310,7 @@ public class AuthServiceImplTest {
         @Test
         void login_wrongPassword_throwsBusinessException() {
             // given
-            when(userService.getUserByEmail(loginRequest.email())).thenReturn(user);
+            when(userService.getUserByEmailForSessionUpdate(loginRequest.email())).thenReturn(user);
             when(passwordEncoder.matches(loginRequest.password(), user.getPassword())).thenReturn(false);
 
             // when & then
@@ -308,7 +323,7 @@ public class AuthServiceImplTest {
         void login_validCredentials_returnsTokensAndRevokesOldTokens(Role role) {
             // given
             user.setRole(role);
-            when(userService.getUserByEmail(loginRequest.email())).thenReturn(user);
+            when(userService.getUserByEmailForSessionUpdate(loginRequest.email())).thenReturn(user);
             when(passwordEncoder.matches(loginRequest.password(), user.getPassword())).thenReturn(true);
 
             when(jwtTokenProvider.generateAccessToken(user))
@@ -348,6 +363,63 @@ public class AuthServiceImplTest {
     class RefreshTests {
 
         @Test
+        void shouldRejectTokenRevokedWhileWaitingForUserLock() {
+            when(refreshTokenService.findTokenState(refreshToken)).thenReturn(
+                    Optional.of(new RefreshTokenState(user.getId(), Instant.now().plusSeconds(3600), false)),
+                    Optional.of(new RefreshTokenState(user.getId(), Instant.now().plusSeconds(3600), true)));
+            when(userService.getUserByIdForSessionUpdate(user.getId())).thenReturn(user);
+
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(refreshToken));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_REVOKED);
+            InOrder order = inOrder(refreshTokenService, userService);
+            order.verify(refreshTokenService).findTokenState(refreshToken);
+            order.verify(userService).getUserByIdForSessionUpdate(user.getId());
+            order.verify(refreshTokenService).findTokenState(refreshToken);
+            verify(refreshTokenService, never()).revokeAllUserTokens(any());
+            verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
+        }
+
+        @Test
+        void shouldRejectTokenDeletedWhileWaitingForUserLock() {
+            when(refreshTokenService.findTokenState(refreshToken)).thenReturn(
+                    Optional.of(new RefreshTokenState(user.getId(), Instant.now().plusSeconds(3600), false)), Optional.empty());
+            when(userService.getUserByIdForSessionUpdate(user.getId())).thenReturn(user);
+
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(refreshToken));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+            verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
+        }
+
+        @Test
+        void shouldRejectTokenExpiredWhileWaitingForUserLock() {
+            when(refreshTokenService.findTokenState(refreshToken)).thenReturn(
+                    Optional.of(new RefreshTokenState(user.getId(), Instant.now().plusSeconds(3600), false)),
+                    Optional.of(new RefreshTokenState(user.getId(), Instant.now().minusSeconds(1), false)));
+            when(userService.getUserByIdForSessionUpdate(user.getId())).thenReturn(user);
+
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(refreshToken));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_EXPIRED);
+            verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
+        }
+
+        @Test
+        void shouldReturnSessionBusyWhenRefreshCannotAcquireLock() {
+            when(refreshTokenService.findTokenState(refreshToken)).thenReturn(
+                    Optional.of(new RefreshTokenState(user.getId(), Instant.now().plusSeconds(3600), false)));
+            CannotAcquireLockException failure = new CannotAcquireLockException("User is locked by another transaction");
+            when(userService.getUserByIdForSessionUpdate(user.getId())).thenThrow(failure);
+
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(refreshToken));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_SESSION_BUSY);
+            assertThat(exception.getCause()).isSameAs(failure);
+            verifyNoInteractions(jwtTokenProvider, refreshTokenCookieProvider);
+        }
+
+        @Test
         void shouldRejectMissingRefreshTokenBeforeLoadingToken() {
             BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(null));
 
@@ -366,20 +438,21 @@ public class AuthServiceImplTest {
         @Test
         void refresh_tokenNotFound_throwsBusinessException() {
             // given
-            when(refreshTokenService.getToken(refreshToken))
-                    .thenThrow(new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+            when(refreshTokenService.findTokenState(refreshToken))
+                    .thenReturn(Optional.empty());
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class,
                     () -> authService.refresh(refreshToken));
             assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+            verifyNoInteractions(userService, jwtTokenProvider, refreshTokenCookieProvider);
         }
 
         @Test
         void refresh_tokenRevoked_throwsBusinessException() {
             // given
             validRefreshToken.setRevoked(true);
-            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
+            mockSessionToken();
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class,
@@ -394,7 +467,7 @@ public class AuthServiceImplTest {
         void refresh_tokenExpired_throwsBusinessException() {
             // given
             validRefreshToken.setExpiresAt(Instant.now().minusSeconds(10));
-            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
+            mockSessionToken();
 
             // when & then
             BusinessException ex = assertThrows(BusinessException.class,
@@ -408,7 +481,7 @@ public class AuthServiceImplTest {
         @Test
         void refresh_lockedAccount_doesNotRevokeOrIssueTokens() {
             user.setStatus(UserStatus.LOCKED);
-            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
+            mockSessionToken();
 
             BusinessException exception = assertThrows(BusinessException.class, () -> authService.refresh(refreshToken));
 
@@ -423,7 +496,7 @@ public class AuthServiceImplTest {
         void refresh_validToken_revokesOldTokensAndReturnsNewPair(Role role) {
             // given
             user.setRole(role);
-            when(refreshTokenService.getToken(refreshToken)).thenReturn(validRefreshToken);
+            mockSessionToken();
             when(jwtTokenProvider.generateAccessToken(user))
                     .thenReturn("new-access-token");
             when(jwtTokenProvider.generateRefreshToken()).thenReturn("rotated-refresh-token");
@@ -443,8 +516,10 @@ public class AuthServiceImplTest {
             assertThat(response.expiresIn()).isEqualTo(3600L);
             assertSessionUser(response, role);
             ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);
-            InOrder order = inOrder(refreshTokenService);
-            order.verify(refreshTokenService).getToken(refreshToken);
+            InOrder order = inOrder(refreshTokenService, userService);
+            order.verify(refreshTokenService).findTokenState(refreshToken);
+            order.verify(userService).getUserByIdForSessionUpdate(user.getId());
+            order.verify(refreshTokenService).findTokenState(refreshToken);
             order.verify(refreshTokenService).revokeAllUserTokens(user);
             order.verify(refreshTokenService).saveToken(captor.capture());
             assertThat(captor.getValue().getUser()).isSameAs(user);
@@ -459,6 +534,45 @@ public class AuthServiceImplTest {
     @Nested
     @DisplayName("logout()")
     class LogoutTests {
+
+        @Test
+        void shouldNotRevokeNewSessionsWhenTokenWasRevokedWhileWaitingForLock() {
+            when(refreshTokenService.findTokenState(refreshToken)).thenReturn(
+                    Optional.of(new RefreshTokenState(user.getId(), Instant.now().plusSeconds(3600), false)),
+                    Optional.of(new RefreshTokenState(user.getId(), Instant.now().plusSeconds(3600), true)));
+            when(userService.getUserByIdForSessionUpdate(user.getId())).thenReturn(user);
+            when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
+
+            assertThat(authService.logout(refreshToken)).isEqualTo("cleared-cookie-header");
+
+            verify(refreshTokenService, never()).revokeAllUserTokens(any());
+            verifyNoInteractions(jwtTokenProvider);
+        }
+
+        @Test
+        void shouldClearCookieWhenTokenWasDeletedWhileWaitingForLock() {
+            when(refreshTokenService.findTokenState(refreshToken)).thenReturn(
+                    Optional.of(new RefreshTokenState(user.getId(), Instant.now().plusSeconds(3600), false)), Optional.empty());
+            when(userService.getUserByIdForSessionUpdate(user.getId())).thenReturn(user);
+            when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
+
+            assertThat(authService.logout(refreshToken)).isEqualTo("cleared-cookie-header");
+
+            verify(refreshTokenService, never()).revokeAllUserTokens(any());
+        }
+
+        @Test
+        void shouldPreserveCookiesWhenLogoutCannotAcquireLock() {
+            when(refreshTokenService.findTokenState(refreshToken)).thenReturn(
+                    Optional.of(new RefreshTokenState(user.getId(), Instant.now().plusSeconds(3600), false)));
+            when(userService.getUserByIdForSessionUpdate(user.getId()))
+                    .thenThrow(new CannotAcquireLockException("User is locked by another transaction"));
+
+            BusinessException exception = assertThrows(BusinessException.class, () -> authService.logout(refreshToken));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_SESSION_BUSY);
+            verifyNoInteractions(refreshTokenCookieProvider, jwtTokenProvider);
+        }
 
         @ParameterizedTest
         @NullAndEmptySource
@@ -477,7 +591,7 @@ public class AuthServiceImplTest {
 
         @Test
         void shouldClearCookieWhenLogoutTokenIsNotFound() {
-            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.empty());
+            when(refreshTokenService.findTokenState(refreshToken)).thenReturn(Optional.empty());
             when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
 
             assertThat(authService.logout(refreshToken)).isEqualTo("cleared-cookie-header");
@@ -490,7 +604,7 @@ public class AuthServiceImplTest {
         @Test
         void logout_validToken_revokesAllUserTokens() {
             // given
-            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.of(validRefreshToken));
+            mockSessionToken();
             when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
 
             // when
@@ -507,7 +621,7 @@ public class AuthServiceImplTest {
         @Test
         void logout_expiredToken_stillRevokesAllUserTokens() {
             validRefreshToken.setExpiresAt(Instant.now().minusSeconds(60));
-            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.of(validRefreshToken));
+            mockSessionToken();
 
             authService.logout(refreshToken);
 
@@ -519,7 +633,7 @@ public class AuthServiceImplTest {
         @Test
         void shouldClearCookieWithoutRevokingNewSessionsWhenLogoutTokenIsRevoked() {
             validRefreshToken.setRevoked(true);
-            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.of(validRefreshToken));
+            mockSessionToken();
             when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
 
             assertThat(authService.logout(refreshToken)).isEqualTo("cleared-cookie-header");
@@ -531,7 +645,7 @@ public class AuthServiceImplTest {
 
         @Test
         void shouldRevokeTokensOnlyOnceWhenLogoutIsRepeated() {
-            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.of(validRefreshToken));
+            mockSessionToken();
             when(refreshTokenCookieProvider.clearCookie()).thenReturn("cleared-cookie-header");
             doAnswer(invocation -> {
                 validRefreshToken.setRevoked(true);
@@ -549,7 +663,7 @@ public class AuthServiceImplTest {
         @Test
         void shouldPropagateLookupFailureWithoutClearingCookie() {
             DataAccessResourceFailureException failure = new DataAccessResourceFailureException("Database unavailable");
-            when(refreshTokenService.findToken(refreshToken)).thenThrow(failure);
+            when(refreshTokenService.findTokenState(refreshToken)).thenThrow(failure);
 
             assertThat(assertThrows(DataAccessResourceFailureException.class, () -> authService.logout(refreshToken)))
                     .isSameAs(failure);
@@ -560,7 +674,7 @@ public class AuthServiceImplTest {
 
         @Test
         void shouldPropagateRevocationFailureWithoutClearingCookie() {
-            when(refreshTokenService.findToken(refreshToken)).thenReturn(Optional.of(validRefreshToken));
+            mockSessionToken();
             DataAccessResourceFailureException failure = new DataAccessResourceFailureException("Database unavailable");
             doThrow(failure).when(refreshTokenService).revokeAllUserTokens(user);
 
@@ -573,12 +687,18 @@ public class AuthServiceImplTest {
         @Test
         void shouldPropagateUnrelatedBusinessErrorsWithoutClearingCookie() {
             BusinessException failure = new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
-            when(refreshTokenService.findToken(refreshToken)).thenThrow(failure);
+            when(refreshTokenService.findTokenState(refreshToken)).thenThrow(failure);
 
             assertThat(assertThrows(BusinessException.class, () -> authService.logout(refreshToken))).isSameAs(failure);
 
             verifyNoInteractions(refreshTokenCookieProvider, jwtTokenProvider);
         }
+    }
+
+    private void mockSessionToken() {
+        when(refreshTokenService.findTokenState(refreshToken)).thenAnswer(invocation -> Optional.of(
+                new RefreshTokenState(user.getId(), validRefreshToken.getExpiresAt(), validRefreshToken.isRevoked())));
+        when(userService.getUserByIdForSessionUpdate(user.getId())).thenReturn(user);
     }
 
     private void assertSessionUser(AuthResponse response, Role expectedRole) {

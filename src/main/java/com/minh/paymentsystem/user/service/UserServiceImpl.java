@@ -1,9 +1,12 @@
 package com.minh.paymentsystem.user.service;
 
+import jakarta.persistence.EntityManager;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.common.dto.PageResponse;
@@ -19,6 +22,7 @@ import com.minh.paymentsystem.user.repository.UserRepository;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final EntityManager entityManager;
 
     @Override
     @Transactional
@@ -68,6 +72,25 @@ public class UserServiceImpl implements UserService {
     public User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public User getUserByIdForSessionUpdate(Long userId) {
+        User user = userRepository.findByIdForSessionUpdate(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        // A locking query may return a managed instance loaded before the lock was acquired.
+        entityManager.refresh(user);
+        return user;
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public User getUserByEmailForSessionUpdate(String email) {
+        User user = userRepository.findByEmailForSessionUpdate(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        entityManager.refresh(user);
+        return user;
     }
 
     @Override

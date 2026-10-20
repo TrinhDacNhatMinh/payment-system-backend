@@ -5,8 +5,11 @@ import java.time.Instant;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -18,6 +21,7 @@ import com.minh.paymentsystem.auth.security.cookie.RefreshTokenCookieProvider;
 import com.minh.paymentsystem.auth.security.jwt.JwtTokenProvider;
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.user.dto.RefreshTokenState;
 import com.minh.paymentsystem.user.dto.UserResponse;
 import com.minh.paymentsystem.user.entity.RefreshToken;
 import com.minh.paymentsystem.user.entity.Role;
@@ -54,7 +58,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public AuthResponse login(LoginRequest request) {
         log.debug("Processing login request");
         User user = authenticateUser(request);
@@ -67,12 +71,14 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public AuthResponse refresh(String refreshToken) {
         log.debug("Processing refresh token request");
-        RefreshToken token = validateRefreshToken(refreshToken);
+        RefreshTokenState initialState = getRefreshTokenState(refreshToken);
+        User user = getUserForSessionUpdate(initialState.userId());
+        RefreshTokenState currentState = getRefreshTokenState(refreshToken);
+        validateRefreshToken(currentState, user.getId());
 
-        User user = token.getUser();
         if (user.getStatus() == UserStatus.LOCKED) {
             throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
         }
@@ -84,19 +90,14 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public String logout(String refreshToken) {
         log.debug("Processing logout request");
         if (!StringUtils.hasText(refreshToken)) {
             return refreshTokenCookieProvider.clearCookie();
         }
-        refreshTokenService.findToken(refreshToken)
-                .filter(token -> !token.isRevoked())
-                .ifPresent(token -> {
-                    User user = token.getUser();
-                    refreshTokenService.revokeAllUserTokens(user);
-                    log.info("Logout processed: userId={}", user.getId());
-                });
+        refreshTokenService.findTokenState(refreshToken)
+                .ifPresent(token -> revokeLogoutTokens(refreshToken, token.userId()));
         return refreshTokenCookieProvider.clearCookie();
     }
 
@@ -122,7 +123,9 @@ public class AuthServiceImpl implements AuthService {
     private User authenticateUser(LoginRequest request) {
         User user;
         try {
-            user = userService.getUserByEmail(request.email());
+            user = userService.getUserByEmailForSessionUpdate(request.email());
+        } catch (PessimisticLockingFailureException | QueryTimeoutException e) {
+            throw new BusinessException(ErrorCode.AUTH_SESSION_BUSY, e);
         } catch (BusinessException e) {
             if (e.getErrorCode() == ErrorCode.USER_NOT_FOUND) {
                 throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, e);
@@ -140,23 +143,45 @@ public class AuthServiceImpl implements AuthService {
         return user;
     }
 
-    private RefreshToken validateRefreshToken(String refreshToken) {
-        RefreshToken token = getRefreshToken(refreshToken);
-        if (token.isRevoked()) {
-            throw new BusinessException(ErrorCode.REFRESH_TOKEN_REVOKED);
-        }
-
-        if (token.getExpiresAt().isBefore(Instant.now())) {
-            throw new BusinessException(ErrorCode.REFRESH_TOKEN_EXPIRED);
-        }
-        return token;
-    }
-
-    private RefreshToken getRefreshToken(String refreshToken) {
+    private RefreshTokenState getRefreshTokenState(String refreshToken) {
         if (!StringUtils.hasText(refreshToken)) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_MISSING);
         }
-        return refreshTokenService.getToken(refreshToken);
+        // Constructor projections read database state without reusing a cached token entity.
+        return refreshTokenService.findTokenState(refreshToken)
+                .orElseThrow(() -> new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+    }
+
+    private User getUserForSessionUpdate(Long userId) {
+        try {
+            return userService.getUserByIdForSessionUpdate(userId);
+        } catch (PessimisticLockingFailureException | QueryTimeoutException e) {
+            throw new BusinessException(ErrorCode.AUTH_SESSION_BUSY, e);
+        }
+    }
+
+    private void validateRefreshToken(RefreshTokenState token, Long userId) {
+        if (!userId.equals(token.userId())) {
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+        }
+
+        if (token.revoked()) {
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_REVOKED);
+        }
+
+        if (token.expiresAt().isBefore(Instant.now())) {
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_EXPIRED);
+        }
+    }
+
+    private void revokeLogoutTokens(String refreshToken, Long userId) {
+        User user = getUserForSessionUpdate(userId);
+        refreshTokenService.findTokenState(refreshToken)
+                .filter(token -> userId.equals(token.userId()) && !token.revoked())
+                .ifPresent(token -> {
+                    refreshTokenService.revokeAllUserTokens(user);
+                    log.info("Logout processed: userId={}", user.getId());
+                });
     }
 
     private AuthResponse issueAuthTokens(User user) {

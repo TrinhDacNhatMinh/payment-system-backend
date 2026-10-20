@@ -33,6 +33,7 @@ public enum ErrorCode {
     PAYMENT_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "Payment order not found"),
 
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "Email already exists"),
+    AUTH_SESSION_BUSY(HttpStatus.CONFLICT, "Authentication session is busy; please try again"),
     CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "Concurrent modification detected on wallet"),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");

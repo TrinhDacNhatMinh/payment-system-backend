@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.user.dto.RefreshTokenState;
 import com.minh.paymentsystem.user.entity.RefreshToken;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.user.repository.RefreshTokenRepository;
@@ -47,6 +48,12 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Transactional(readOnly = true)
     public Optional<RefreshToken> findToken(String token) {
         return refreshTokenRepository.findByToken(token);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<RefreshTokenState> findTokenState(String token) {
+        return refreshTokenRepository.findStateByToken(token);
     }
 
     @Override

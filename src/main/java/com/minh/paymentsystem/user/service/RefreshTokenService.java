@@ -2,6 +2,7 @@ package com.minh.paymentsystem.user.service;
 
 import java.util.Optional;
 
+import com.minh.paymentsystem.user.dto.RefreshTokenState;
 import com.minh.paymentsystem.user.entity.RefreshToken;
 import com.minh.paymentsystem.user.entity.User;
 
@@ -13,6 +14,8 @@ public interface RefreshTokenService {
     RefreshToken getToken(String token);
 
     Optional<RefreshToken> findToken(String token);
+
+    Optional<RefreshTokenState> findTokenState(String token);
 
     void cleanUpTokens(java.time.Instant threshold);
 }

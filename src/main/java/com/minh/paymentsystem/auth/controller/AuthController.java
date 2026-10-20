@@ -82,7 +82,8 @@ public class AuthController {
             }),
             @ApiResponse(responseCode = "400", description = "Validation error"),
             @ApiResponse(responseCode = "401", description = "Invalid credentials"),
-            @ApiResponse(responseCode = "403", description = "Account locked, CSRF_TOKEN_MISSING, CSRF_TOKEN_INVALID, or ORIGIN_NOT_ALLOWED")
+            @ApiResponse(responseCode = "403", description = "Account locked, CSRF_TOKEN_MISSING, CSRF_TOKEN_INVALID, or ORIGIN_NOT_ALLOWED"),
+            @ApiResponse(responseCode = "409", description = "AUTH_SESSION_BUSY: session lock could not be acquired; no tokens are issued")
     })
     @Parameters({
             @Parameter(name = "Origin", in = ParameterIn.HEADER, required = true, description = "Exact frontend origin configured in auth.allowed-origins", example = "http://localhost:5173"),
@@ -105,7 +106,8 @@ public class AuthController {
             }),
             @ApiResponse(responseCode = "401", description = "Refresh token cookie missing, empty, expired, or revoked"),
             @ApiResponse(responseCode = "403", description = "Account locked, CSRF_TOKEN_MISSING, CSRF_TOKEN_INVALID, or ORIGIN_NOT_ALLOWED"),
-            @ApiResponse(responseCode = "404", description = "Refresh token not found")
+            @ApiResponse(responseCode = "404", description = "Refresh token not found"),
+            @ApiResponse(responseCode = "409", description = "AUTH_SESSION_BUSY: session lock could not be acquired; no tokens are issued")
     })
     @Parameters({
             @Parameter(name = "Origin", in = ParameterIn.HEADER, required = true, description = "Exact frontend origin configured in auth.allowed-origins", example = "http://localhost:5173"),
@@ -128,6 +130,7 @@ public class AuthController {
                     @Header(name = HttpHeaders.SET_COOKIE, description = "Clears refresh_token and XSRF-TOKEN using Max-Age=0 and their original cookie scope", schema = @Schema(type = "string"))
             }),
             @ApiResponse(responseCode = "403", description = "CSRF_TOKEN_MISSING, CSRF_TOKEN_INVALID, or ORIGIN_NOT_ALLOWED"),
+            @ApiResponse(responseCode = "409", description = "AUTH_SESSION_BUSY: session lock could not be acquired; cookies are not cleared"),
             @ApiResponse(responseCode = "500", description = "Logout failed due to a system error; cookies are not cleared")
     })
     @Parameters({

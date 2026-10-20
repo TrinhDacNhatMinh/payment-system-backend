@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 import java.util.Optional;
+import jakarta.persistence.EntityManager;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -28,6 +29,9 @@ class UserServiceImplTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private EntityManager entityManager;
+
     @InjectMocks
     private UserServiceImpl userService;
 
@@ -40,6 +44,38 @@ class UserServiceImplTest {
                 .email("test@example.com")
                 .status(UserStatus.ACTIVE)
                 .build();
+    }
+
+    @Test
+    void shouldAcquireSessionLockAndRefreshUserById() {
+        when(userRepository.findByIdForSessionUpdate(1L)).thenReturn(Optional.of(testUser));
+
+        assertThat(userService.getUserByIdForSessionUpdate(1L)).isSameAs(testUser);
+
+        var order = inOrder(userRepository, entityManager);
+        order.verify(userRepository).findByIdForSessionUpdate(1L);
+        order.verify(entityManager).refresh(testUser);
+    }
+
+    @Test
+    void shouldAcquireSessionLockAndRefreshUserByEmail() {
+        when(userRepository.findByEmailForSessionUpdate(testUser.getEmail())).thenReturn(Optional.of(testUser));
+
+        assertThat(userService.getUserByEmailForSessionUpdate(testUser.getEmail())).isSameAs(testUser);
+
+        var order = inOrder(userRepository, entityManager);
+        order.verify(userRepository).findByEmailForSessionUpdate(testUser.getEmail());
+        order.verify(entityManager).refresh(testUser);
+    }
+
+    @Test
+    void shouldRejectMissingUserWhenAcquiringSessionLock() {
+        when(userRepository.findByIdForSessionUpdate(1L)).thenReturn(Optional.empty());
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> userService.getUserByIdForSessionUpdate(1L));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.USER_NOT_FOUND);
+        verifyNoInteractions(entityManager);
     }
 
     @Nested

@@ -46,6 +46,8 @@ import com.minh.paymentsystem.auth.security.jwt.JwtAuthenticationEntryPoint;
 import com.minh.paymentsystem.auth.security.jwt.JwtAuthenticationFilter;
 import com.minh.paymentsystem.auth.security.jwt.JwtTokenProvider;
 import com.minh.paymentsystem.auth.service.AuthService;
+import com.minh.paymentsystem.common.exception.BusinessException;
+import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.common.exception.GlobalExceptionHandler;
 import com.minh.paymentsystem.common.response.BaseResponse;
 import com.minh.paymentsystem.config.SecurityConfig;
@@ -168,6 +170,28 @@ class CorsSecurityTest {
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
         verifyNoInteractions(authService);
+    }
+
+    @Test
+    void shouldKeepCorsHeadersAndCookiesUnchangedOnSessionLockFailure() throws Exception {
+        MvcResult csrfResult = mvc.perform(get(CSRF_PATH).header(HttpHeaders.ORIGIN, ORIGIN))
+                .andExpect(status().isOk())
+                .andReturn();
+        String token = objectMapper.readTree(csrfResult.getResponse().getContentAsString())
+                .path("data")
+                .path("token")
+                .asText();
+        when(authService.logout("session-refresh")).thenThrow(new BusinessException(ErrorCode.AUTH_SESSION_BUSY));
+
+        mvc.perform(post("/api/v1/auth/logout")
+                .header(HttpHeaders.ORIGIN, ORIGIN)
+                .header(AuthRequestFilter.CSRF_HEADER_NAME, token)
+                .cookie(csrfResult.getResponse().getCookie("XSRF-TOKEN"), new Cookie("refresh_token", "session-refresh")))
+                .andExpect(status().isConflict())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+                .andExpect(jsonPath("$.error.code").value("AUTH_SESSION_BUSY"));
     }
 
     @Test

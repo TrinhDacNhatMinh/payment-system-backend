@@ -1,5 +1,7 @@
 package com.minh.paymentsystem.user.service;
 
+import java.util.Optional;
+
 import org.springframework.data.domain.Pageable;
 
 import com.minh.paymentsystem.common.dto.PageResponse;
@@ -16,6 +18,8 @@ public interface UserService {
     User getUserById(Long userId);
 
     User getUserByEmail(String email);
+
+    Optional<User> findUserByEmail(String email);
 
     User getUserByIdForSessionUpdate(Long userId);
 

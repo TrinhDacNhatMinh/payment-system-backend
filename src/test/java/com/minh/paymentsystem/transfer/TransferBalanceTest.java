@@ -3,11 +3,15 @@ package com.minh.paymentsystem.transfer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.UUID;
 import jakarta.persistence.EntityManager;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.transfer.dto.TransferRequest;
@@ -36,29 +40,38 @@ class TransferBalanceTest {
     @Autowired
     private EntityManager entityManager;
 
+    @Autowired
+    private JdbcTemplate jdbc;
+
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void shouldReturnThePersistedSenderBalanceAfterTransfer() {
         User sender = createUser("balance-sender@test.com");
         User recipient = createUser("balance-recipient@test.com");
-        walletRepository.save(Wallet.builder()
-                .user(sender)
-                .balance(new BigDecimal("500000"))
-                .build());
-        walletRepository.save(Wallet.builder()
-                .user(recipient)
-                .balance(BigDecimal.ZERO)
-                .build());
+        try {
+            walletRepository.save(Wallet.builder()
+                    .user(sender)
+                    .balance(new BigDecimal("500000"))
+                    .build());
+            walletRepository.save(Wallet.builder()
+                    .user(recipient)
+                    .balance(BigDecimal.ZERO)
+                    .build());
 
-        TransferResponse response = transferService.transfer(sender.getId(),
-                new TransferRequest(recipient.getEmail(), new BigDecimal("100000"), "Balance regression"));
-        entityManager.flush();
-        entityManager.clear();
+            TransferResponse response = transferService.transfer(sender.getId(), List.of(UUID.randomUUID().toString()),
+                    new TransferRequest(recipient.getEmail(), new BigDecimal("100000"), "Balance regression"));
 
-        Wallet persistedSender = walletRepository.findByUserId(sender.getId()).orElseThrow();
-        Wallet persistedRecipient = walletRepository.findByUserId(recipient.getId()).orElseThrow();
-        assertThat(response.fromWalletBalance()).isEqualByComparingTo("400000");
-        assertThat(response.fromWalletBalance()).isEqualByComparingTo(persistedSender.getBalance());
-        assertThat(persistedRecipient.getBalance()).isEqualByComparingTo("100000");
+            Wallet persistedSender = walletRepository.findByUserId(sender.getId()).orElseThrow();
+            Wallet persistedRecipient = walletRepository.findByUserId(recipient.getId()).orElseThrow();
+            assertThat(response.fromWalletBalance()).isEqualByComparingTo("400000");
+            assertThat(response.fromWalletBalance()).isEqualByComparingTo(persistedSender.getBalance());
+            assertThat(persistedRecipient.getBalance()).isEqualByComparingTo("100000");
+        } finally {
+            jdbc.update("DELETE FROM transfer_requests WHERE user_id IN (?, ?)", sender.getId(), recipient.getId());
+            jdbc.update("DELETE FROM transactions WHERE wallet_id IN (SELECT id FROM wallets WHERE user_id IN (?, ?))", sender.getId(), recipient.getId());
+            jdbc.update("DELETE FROM wallets WHERE user_id IN (?, ?)", sender.getId(), recipient.getId());
+            jdbc.update("DELETE FROM users WHERE id IN (?, ?)", sender.getId(), recipient.getId());
+        }
     }
 
     @Test

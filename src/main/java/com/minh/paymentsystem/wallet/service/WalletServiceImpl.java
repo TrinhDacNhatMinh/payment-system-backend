@@ -1,6 +1,7 @@
 package com.minh.paymentsystem.wallet.service;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -73,5 +74,11 @@ public class WalletServiceImpl implements WalletService {
     public Wallet getWalletByUserId(Long userId) {
         return walletRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Wallet> findWalletByUserId(Long userId) {
+        return walletRepository.findByUserId(userId);
     }
 }

@@ -29,6 +29,8 @@ import com.minh.paymentsystem.auth.security.cors.AuthCorsProcessor;
 import com.minh.paymentsystem.auth.security.csrf.AuthRequestFilter;
 import com.minh.paymentsystem.auth.security.jwt.JwtAuthenticationEntryPoint;
 import com.minh.paymentsystem.auth.security.jwt.JwtAuthenticationFilter;
+import com.minh.paymentsystem.transfer.security.IdempotencyKey;
+import com.minh.paymentsystem.transfer.security.TransferCacheControlFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -81,6 +83,7 @@ public class SecurityConfig {
                         .anyRequest()
                         .authenticated())
                 .addFilterAt(buildCorsFilter(allowedOrigins), CorsFilter.class)
+                .addFilterBefore(new TransferCacheControlFilter(), CorsFilter.class)
                 .addFilterBefore(new AuthRequestFilter(Set.copyOf(allowedOrigins), authAccessDeniedHandler), CsrfFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
@@ -91,7 +94,7 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowCredentials(true);
         configuration.setAllowedMethods(List.of("GET", "HEAD", "POST", "PATCH", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.AUTHORIZATION, AuthRequestFilter.CSRF_HEADER_NAME));
+        configuration.setAllowedHeaders(List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.AUTHORIZATION, AuthRequestFilter.CSRF_HEADER_NAME, IdempotencyKey.HEADER_NAME));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/v1/**", configuration);
         CorsFilter filter = new CorsFilter(source);

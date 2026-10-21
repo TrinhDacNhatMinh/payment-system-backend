@@ -3,6 +3,8 @@ package com.minh.paymentsystem.transfer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -20,6 +22,8 @@ import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.transaction.repository.TransactionRepository;
 import com.minh.paymentsystem.transfer.dto.TransferRequest;
+import com.minh.paymentsystem.transfer.exception.TransferRejectedException;
+import com.minh.paymentsystem.transfer.repository.TransferInstructionRepository;
 import com.minh.paymentsystem.transfer.service.TransferService;
 import com.minh.paymentsystem.user.entity.Role;
 import com.minh.paymentsystem.user.entity.User;
@@ -34,6 +38,9 @@ class TransferServiceConcurrencyTest {
 
     @Autowired
     private TransferService transferService;
+
+    @Autowired
+    private TransferInstructionRepository instructionRepository;
 
     @Autowired
     private TransactionRepository transactionRepository;
@@ -53,6 +60,7 @@ class TransferServiceConcurrencyTest {
     @BeforeEach
     void setUp() {
         // Delete in correct FK order: transactions -> wallets -> users
+        instructionRepository.deleteAll();
         transactionRepository.deleteAll();
         walletRepository.deleteAll();
         userRepository.deleteAll();
@@ -95,6 +103,7 @@ class TransferServiceConcurrencyTest {
     @AfterEach
     void tearDown() {
         // Delete in correct FK order: transactions -> wallets -> users
+        instructionRepository.deleteAll();
         transactionRepository.deleteAll();
         walletRepository.deleteAll();
         userRepository.deleteAll();
@@ -122,8 +131,11 @@ class TransferServiceConcurrencyTest {
                     readyLatch.countDown();
                     startLatch.await(); // Wait for all threads to be ready
 
-                    transferService.transfer(sender.getId(), request);
+                    transferService.transfer(sender.getId(), List.of(UUID.randomUUID().toString()), request);
                     successCount.incrementAndGet();
+                } catch (TransferRejectedException e) {
+                    assertThat(e.getError().code()).isEqualTo(ErrorCode.WALLET_INSUFFICIENT_BALANCE.name());
+                    failCount.incrementAndGet();
                 } catch (BusinessException e) {
                     if (e.getErrorCode() == ErrorCode.CONCURRENT_MODIFICATION) {
                         failCount.incrementAndGet();

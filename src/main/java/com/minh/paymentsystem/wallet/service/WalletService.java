@@ -1,6 +1,7 @@
 package com.minh.paymentsystem.wallet.service;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.wallet.dto.WalletResponse;
@@ -17,4 +18,6 @@ public interface WalletService {
 
     // Internal API for other domains
     Wallet getWalletByUserId(Long userId);
+
+    Optional<Wallet> findWalletByUserId(Long userId);
 }

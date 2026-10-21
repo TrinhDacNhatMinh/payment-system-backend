@@ -12,6 +12,7 @@ public enum ErrorCode {
     SELF_TRANSFER_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "Cannot transfer money to yourself"),
     RECIPIENT_LOCKED(HttpStatus.BAD_REQUEST, "Recipient account is locked"),
     AMOUNT_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "Amount is out of allowed range"),
+    IDEMPOTENCY_KEY_INVALID(HttpStatus.BAD_REQUEST, "Idempotency key must be a single UUID v4"),
 
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Invalid email or password"),
     TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "JWT token has expired"),
@@ -31,10 +32,13 @@ public enum ErrorCode {
     WALLET_NOT_FOUND(HttpStatus.NOT_FOUND, "Wallet not found"),
     RECIPIENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Recipient not found"),
     PAYMENT_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "Payment order not found"),
+    TRANSFER_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "Transfer request not found"),
 
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "Email already exists"),
     AUTH_SESSION_BUSY(HttpStatus.CONFLICT, "Authentication session is busy; please try again"),
     CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "Concurrent modification detected on wallet"),
+    IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "Idempotency key was used with a different transfer payload"),
+    TRANSFER_IN_PROGRESS(HttpStatus.CONFLICT, "Transfer request is being processed"),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 

@@ -7,6 +7,7 @@ import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -15,10 +16,27 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import com.minh.paymentsystem.common.response.BaseResponse;
+import com.minh.paymentsystem.transfer.dto.TransferRequestError;
+import com.minh.paymentsystem.transfer.exception.TransferRejectedException;
 
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(TransferRejectedException.class)
+    public ResponseEntity<BaseResponse<Void>> handleTransferRejection(TransferRejectedException exception) {
+        TransferRequestError error = exception.getError();
+        log.warn("Transfer rejected: code={}", error.code());
+        return ResponseEntity.status(error.httpStatus())
+                .body(BaseResponse.error(error.code(), error.message()));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<BaseResponse<Void>> handleUnreadableRequest(HttpMessageNotReadableException exception) {
+        log.warn("Malformed request body: code={}", ErrorCode.VALIDATION_ERROR);
+        return ResponseEntity.badRequest()
+                .body(BaseResponse.error(ErrorCode.VALIDATION_ERROR.name(), ErrorCode.VALIDATION_ERROR.getMessage()));
+    }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<BaseResponse<Void>> handleBusinessException(BusinessException ex) {

@@ -1,5 +1,6 @@
 package com.minh.paymentsystem.user.service;
 
+import java.util.Optional;
 import jakarta.persistence.EntityManager;
 
 import lombok.RequiredArgsConstructor;
@@ -72,6 +73,12 @@ public class UserServiceImpl implements UserService {
     public User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<User> findUserByEmail(String email) {
+        return userRepository.findByEmail(email);
     }
 
     @Override

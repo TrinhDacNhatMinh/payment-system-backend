@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.common.validation.WholeVnd;
 import com.minh.paymentsystem.transfer.dto.TransferRequest;
 import com.minh.paymentsystem.transfer.entity.TransferInstruction;
 import com.minh.paymentsystem.transfer.enums.TransferRequestState;
@@ -33,6 +34,7 @@ public class TransferRegistrationService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED)
     public void register(Long userId, UUID key, TransferRequest request) {
+        WholeVnd.requirePositiveAmount(request.amount());
         if (repository.findByUserIdAndOperationAndIdempotencyKey(userId, TransferInstruction.OPERATION, key).isPresent()) {
             return;
         }

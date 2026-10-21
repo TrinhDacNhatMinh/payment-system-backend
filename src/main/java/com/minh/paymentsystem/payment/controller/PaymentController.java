@@ -30,7 +30,7 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
-    @Operation(summary = "Create deposit order", description = "Creates a VNPay deposit order and returns the payment URL.")
+    @Operation(summary = "Create deposit order", description = "Creates a VNPay deposit order for a whole VND amount from 10000 to 50000000 and returns the payment URL. Fractional input is rejected, never rounded. The amount remains a JSON number on this endpoint.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully created deposit order"),
             @ApiResponse(responseCode = "400", description = "Validation error or amount out of allowed range"),

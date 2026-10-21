@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -29,8 +31,8 @@ import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.common.exception.GlobalExceptionHandler;
 import com.minh.paymentsystem.config.SecurityConfig;
-import com.minh.paymentsystem.transfer.dto.TransferRequest;
 import com.minh.paymentsystem.transfer.dto.TransferRequestResponse;
+import com.minh.paymentsystem.transfer.dto.TransferRequestSnapshot;
 import com.minh.paymentsystem.transfer.enums.TransferRequestState;
 import com.minh.paymentsystem.transfer.service.TransferService;
 import com.minh.paymentsystem.user.entity.Role;
@@ -101,7 +103,7 @@ class TransferSecurityTest {
     void shouldUsePrincipalOwnershipForLookupAndReturnNullOutcomeForPending() throws Exception {
         when(transferService.getRequest(2L, KEY)).thenReturn(new TransferRequestResponse(
                 java.util.UUID.fromString(KEY), TransferRequestState.PENDING,
-                new TransferRequest("recipient@example.com", new java.math.BigDecimal("1000"), null), null, null));
+                new TransferRequestSnapshot("recipient@example.com", new java.math.BigDecimal("1000"), null), null, null, false));
 
         mvc.perform(get("/api/v1/transfer/requests/" + KEY).with(authentication(principal())))
                 .andExpect(status().isOk())
@@ -113,6 +115,18 @@ class TransferSecurityTest {
         verify(transferService).getRequest(2L, KEY);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"999", "50000001", "9999999999999999"})
+    void shouldRejectAmountsOutsideTransferLimitsBeforeCallingService(String amount) throws Exception {
+        mvc.perform(post("/api/v1/transfer").with(authentication(principal()))
+                .header("Idempotency-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"toEmail\":\"recipient@example.com\",\"amount\":\"" + amount + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"));
+        verifyNoInteractions(transferService);
+    }
+
     @Test
     void shouldKeepCorsAndNoStoreHeadersOnKeyErrors() throws Exception {
         when(transferService.transfer(eq(2L), eq(List.of(KEY)), any()))
@@ -121,7 +135,7 @@ class TransferSecurityTest {
         mvc.perform(post("/api/v1/transfer").with(authentication(principal()))
                 .header(HttpHeaders.ORIGIN, ORIGIN).header("Idempotency-Key", KEY)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"toEmail\":\"recipient@example.com\",\"amount\":\"1000.50\"}"))
+                .content("{\"toEmail\":\"recipient@example.com\",\"amount\":\"1000\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("IDEMPOTENCY_KEY_REUSED"))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN))

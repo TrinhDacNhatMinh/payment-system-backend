@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.common.validation.WholeVnd;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.wallet.dto.WalletResponse;
 import com.minh.paymentsystem.wallet.entity.Wallet;
@@ -46,9 +47,11 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public void debit(Long walletId, BigDecimal amount) {
+        WholeVnd.requirePositiveAmount(amount);
         Wallet wallet = walletRepository.findById(walletId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
 
+        WholeVnd.requireWritableBalance(wallet.getBalance());
         if (wallet.getBalance().compareTo(amount) < 0) {
             throw new BusinessException(ErrorCode.WALLET_INSUFFICIENT_BALANCE);
         }
@@ -61,10 +64,14 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public void credit(Long walletId, BigDecimal amount) {
+        WholeVnd.requirePositiveAmount(amount);
         Wallet wallet = walletRepository.findById(walletId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
 
-        wallet.setBalance(wallet.getBalance().add(amount));
+        WholeVnd.requireWritableBalance(wallet.getBalance());
+        BigDecimal balance = wallet.getBalance().add(amount);
+        WholeVnd.requireWritableBalance(balance);
+        wallet.setBalance(balance);
 
         walletRepository.save(wallet);
     }

@@ -16,6 +16,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.Check;
+import org.hibernate.annotations.Checks;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import com.minh.paymentsystem.common.entity.BaseEntity;
@@ -23,7 +24,10 @@ import com.minh.paymentsystem.user.entity.User;
 
 @Entity
 @Table(name = "wallets")
-@Check(name = "ck_wallets_balance_non_negative", constraints = "balance >= 0")
+@Checks({
+        @Check(name = "ck_wallets_balance_non_negative", constraints = "balance >= 0"),
+        @Check(name = "ck_wallets_whole_vnd", constraints = "balance = floor(balance)")
+})
 @Getter
 @Setter
 @SuperBuilder

@@ -21,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.minh.paymentsystem.common.validation.WholeVnd;
+
 @Service
 @Slf4j
 public class VnpayGatewayServiceImpl implements PaymentGatewayService {
@@ -39,6 +41,7 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
 
     @Override
     public String buildPaymentUrl(String orderId, BigDecimal amount, String ipAddress) {
+        WholeVnd.requirePositiveAmount(amount);
         log.debug("Building payment URL for order {}, amount {}", orderId, amount);
         Map<String, String> vnpParams = createPaymentParameters(orderId, amount, ipAddress);
         return vnpUrl + "?" + buildSignedQuery(vnpParams);
@@ -73,7 +76,7 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
 
         // Amount must be multiplied by 100 according to VNPay specs
         BigDecimal amountInVnPayFormat = amount.multiply(new BigDecimal("100"));
-        vnpParams.put("vnp_Amount", String.valueOf(amountInVnPayFormat.longValue()));
+        vnpParams.put("vnp_Amount", amountInVnPayFormat.toBigIntegerExact().toString());
 
         vnpParams.put("vnp_ReturnUrl", vnpReturnUrl);
         vnpParams.put("vnp_IpAddr", ipAddress);

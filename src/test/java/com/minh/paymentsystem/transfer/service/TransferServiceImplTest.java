@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +31,7 @@ import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transfer.dto.TransferRequest;
 import com.minh.paymentsystem.transfer.dto.TransferRequestError;
 import com.minh.paymentsystem.transfer.dto.TransferRequestResponse;
+import com.minh.paymentsystem.transfer.dto.TransferRequestSnapshot;
 import com.minh.paymentsystem.transfer.dto.TransferResponse;
 import com.minh.paymentsystem.transfer.enums.TransferRequestState;
 import com.minh.paymentsystem.transfer.exception.TransferRejectedException;
@@ -52,7 +54,7 @@ class TransferServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        request = new TransferRequest("recipient@example.com", new BigDecimal("1000.50"), null);
+        request = new TransferRequest("recipient@example.com", new BigDecimal("1000"), null);
     }
 
     @ParameterizedTest
@@ -95,7 +97,7 @@ class TransferServiceImplTest {
     void shouldReturnReceiptAfterWorkerCommit() {
         TransferResponse receipt = new TransferResponse(10L, BigDecimal.ZERO, request.amount(), TransactionStatus.SUCCESS, LocalDateTime.now());
         when(processingService.process(1L, KEY, request)).thenReturn(
-                new TransferRequestResponse(KEY, TransferRequestState.SUCCEEDED, request, receipt, null));
+                new TransferRequestResponse(KEY, TransferRequestState.SUCCEEDED, TransferRequestSnapshot.from(request), receipt, null, false));
 
         assertThat(service.transfer(1L, List.of(KEY.toString().toUpperCase()), request)).isSameAs(receipt);
         var order = inOrder(registrationService, processingService);
@@ -109,7 +111,7 @@ class TransferServiceImplTest {
         when(registrationService.exists(1L, KEY)).thenReturn(true);
         TransferResponse receipt = new TransferResponse(10L, BigDecimal.ZERO, request.amount(), TransactionStatus.SUCCESS, LocalDateTime.now());
         when(processingService.process(1L, KEY, request)).thenReturn(
-                new TransferRequestResponse(KEY, TransferRequestState.SUCCEEDED, request, receipt, null));
+                new TransferRequestResponse(KEY, TransferRequestState.SUCCEEDED, TransferRequestSnapshot.from(request), receipt, null, false));
 
         assertThat(service.transfer(1L, List.of(KEY.toString()), request)).isSameAs(receipt);
     }
@@ -129,7 +131,7 @@ class TransferServiceImplTest {
     void shouldReplayStoredRejectionAfterWorkerReturns() {
         TransferRequestError error = new TransferRequestError(400, "WALLET_INSUFFICIENT_BALANCE", "Stored safe message");
         when(processingService.process(1L, KEY, request)).thenReturn(
-                new TransferRequestResponse(KEY, TransferRequestState.REJECTED, request, null, error));
+                new TransferRequestResponse(KEY, TransferRequestState.REJECTED, TransferRequestSnapshot.from(request), null, error, false));
 
         TransferRejectedException exception = assertThrows(TransferRejectedException.class,
                 () -> service.transfer(1L, List.of(KEY.toString()), request));
@@ -139,11 +141,26 @@ class TransferServiceImplTest {
 
     @Test
     void shouldScopeLookupToCurrentUserWithoutRegisteringOrProcessing() {
-        TransferRequestResponse pending = new TransferRequestResponse(KEY, TransferRequestState.PENDING, request, null, null);
+        TransferRequestResponse pending = new TransferRequestResponse(KEY, TransferRequestState.PENDING, TransferRequestSnapshot.from(request), null, null, false);
         when(processingService.getRequest(2L, KEY)).thenReturn(pending);
 
         assertThat(service.getRequest(2L, KEY.toString())).isSameAs(pending);
         verifyNoInteractions(registrationService);
         verify(processingService, never()).process(any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"999", "50000001"})
+    void shouldRejectOutOfRangeAmountsBeforeRegisteringKey(String amount) {
+        try (var factory = Validation.buildDefaultValidatorFactory()) {
+            var validatedService = new TransferServiceImpl(registrationService, processingService, factory.getValidator());
+            var invalidRequest = new TransferRequest("recipient@example.com", new BigDecimal(amount), null);
+
+            BusinessException exception = assertThrows(BusinessException.class,
+                    () -> validatedService.transfer(1L, List.of(KEY.toString()), invalidRequest));
+
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR);
+            verifyNoInteractions(registrationService, processingService);
+        }
     }
 }

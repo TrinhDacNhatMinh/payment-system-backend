@@ -37,14 +37,14 @@ public class TransferController {
 
     private final TransferService transferService;
 
-    @Operation(summary = "Transfer money", description = "Requires exactly one UUID v4 Idempotency-Key scoped to the authenticated sender. Same key/payload replays the stored receipt or rejection. Different payload returns IDEMPOTENCY_KEY_REUSED; a locked request returns TRANSFER_IN_PROGRESS. Transfer money and the receipt commit atomically. Monetary fields use exact decimal JSON strings. On timeout or 5xx, query the same key; do not create a new key or automatically retry.")
+    @Operation(summary = "Transfer money", description = "Requires exactly one UUID v4 Idempotency-Key scoped to the authenticated sender. New amounts are integer JSON strings from 1000 to 50000000 VND inclusive, without a decimal point. Same key/payload replays the stored receipt or rejection. Different payload returns IDEMPOTENCY_KEY_REUSED; a locked request returns TRANSFER_IN_PROGRESS. Money and receipt commit atomically. Legacy fractional balances block new writes with LEGACY_FRACTIONAL_MONEY; historical receipts remain unchanged and readable by lookup. On timeout or 5xx, query the same key; do not create a new key or automatically retry.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully transferred money"),
             @ApiResponse(responseCode = "400", description = "IDEMPOTENCY_KEY_INVALID, validation error, or stored business rejection"),
             @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
             @ApiResponse(responseCode = "403", description = "Account locked or access denied"),
             @ApiResponse(responseCode = "404", description = "Recipient not found"),
-            @ApiResponse(responseCode = "409", description = "IDEMPOTENCY_KEY_REUSED, TRANSFER_IN_PROGRESS, or CONCURRENT_MODIFICATION"),
+            @ApiResponse(responseCode = "409", description = "IDEMPOTENCY_KEY_REUSED, TRANSFER_IN_PROGRESS, CONCURRENT_MODIFICATION, or LEGACY_FRACTIONAL_MONEY requiring reconciliation"),
             @ApiResponse(responseCode = "500", description = "Unknown outcome; query the request with the same key")
     })
     @PostMapping
@@ -59,7 +59,7 @@ public class TransferController {
                 .body(BaseResponse.success(response));
     }
 
-    @Operation(summary = "Look up a transfer request", description = "Reads only the authenticated sender's request. Returns canonical payload, PENDING/SUCCEEDED/REJECTED and the stored receipt or rejection. This GET never executes or resumes a transfer. A 404 does not prove an earlier POST failed or will not arrive.")
+    @Operation(summary = "Look up a transfer request", description = "Reads only the authenticated sender's request. Returns canonical payload, PENDING/SUCCEEDED/REJECTED, receipt/error and legacyFractional. Whole database values such as 1000.00 serialize as integer strings. Legacy fractional payloads/receipts are preserved exactly with legacyFractional=true and must not be rounded or resubmitted as new integer amounts. This GET never executes or resumes a transfer. A 404 does not prove an earlier POST failed or will not arrive.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Request state and any stored outcome"),
             @ApiResponse(responseCode = "400", description = "IDEMPOTENCY_KEY_INVALID"),

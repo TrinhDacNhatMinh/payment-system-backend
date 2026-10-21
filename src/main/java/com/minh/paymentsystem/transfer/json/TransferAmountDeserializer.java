@@ -11,11 +11,11 @@ import com.fasterxml.jackson.databind.JsonDeserializer;
 
 public class TransferAmountDeserializer extends JsonDeserializer<BigDecimal> {
 
-    private static final Pattern DECIMAL = Pattern.compile("[0-9]{1,16}(\\.[0-9]{1,2})?");
+    private static final Pattern INTEGER = Pattern.compile("[0-9]{1,16}");
 
     @Override
     public BigDecimal deserialize(JsonParser parser, DeserializationContext context) throws IOException {
-        if (!parser.hasToken(JsonToken.VALUE_STRING) || !DECIMAL.matcher(parser.getText()).matches()) {
+        if (!parser.hasToken(JsonToken.VALUE_STRING) || !INTEGER.matcher(parser.getText()).matches()) {
             return (BigDecimal) context.handleUnexpectedToken(BigDecimal.class, parser);
         }
         return new BigDecimal(parser.getText());

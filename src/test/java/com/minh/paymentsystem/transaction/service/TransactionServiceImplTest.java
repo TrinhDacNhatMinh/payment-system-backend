@@ -58,6 +58,16 @@ class TransactionServiceImplTest {
                 .build();
     }
 
+    @Test
+    void shouldRejectFractionalTransactionBeforePersistence() {
+        BusinessException exception = assertThrows(BusinessException.class, () -> transactionService.createTransaction(
+                new CreateTransactionCommand(testWallet, TransactionType.DEPOSIT, TransactionStatus.SUCCESS,
+                        new BigDecimal("1000.50"), "fractional-reference", null)));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AMOUNT_OUT_OF_RANGE);
+        verifyNoInteractions(transactionRepository);
+    }
+
     @Nested
     @DisplayName("createTransaction()")
     class CreateTransactionTests {

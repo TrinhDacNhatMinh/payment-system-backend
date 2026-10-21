@@ -52,6 +52,42 @@ class WalletServiceImplTest {
                 .build();
     }
 
+    @Test
+    void shouldRejectFractionalDebitAndCreditBeforeAccessingWallet() {
+        BigDecimal fraction = new BigDecimal("1000.001");
+
+        assertThrows(BusinessException.class, () -> walletService.debit(100L, fraction));
+        assertThrows(BusinessException.class, () -> walletService.credit(100L, fraction));
+
+        verifyNoInteractions(walletRepository);
+    }
+
+    @Test
+    void shouldBlockLegacyFractionalBalanceWithoutChangingIt() {
+        testWallet.setBalance(new BigDecimal("50000.50"));
+        when(walletRepository.findById(100L)).thenReturn(Optional.of(testWallet));
+
+        BusinessException debit = assertThrows(BusinessException.class, () -> walletService.debit(100L, new BigDecimal("1000")));
+        BusinessException credit = assertThrows(BusinessException.class, () -> walletService.credit(100L, new BigDecimal("1000")));
+
+        assertThat(debit.getErrorCode()).isEqualTo(ErrorCode.LEGACY_FRACTIONAL_MONEY);
+        assertThat(credit.getErrorCode()).isEqualTo(ErrorCode.LEGACY_FRACTIONAL_MONEY);
+        assertThat(testWallet.getBalance()).isEqualByComparingTo("50000.50");
+        verify(walletRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldAcceptWholeDatabaseScaleAndPreventBalanceOverflow() {
+        testWallet.setBalance(new BigDecimal("9999999999999999.00"));
+        when(walletRepository.findById(100L)).thenReturn(Optional.of(testWallet));
+
+        BusinessException failure = assertThrows(BusinessException.class, () -> walletService.credit(100L, new BigDecimal("1.00")));
+
+        assertThat(failure.getErrorCode()).isEqualTo(ErrorCode.AMOUNT_OUT_OF_RANGE);
+        assertThat(testWallet.getBalance()).isEqualByComparingTo("9999999999999999");
+        verify(walletRepository, never()).save(any());
+    }
+
     @Nested
     @DisplayName("createWalletForUser()")
     class CreateWalletForUserTests {

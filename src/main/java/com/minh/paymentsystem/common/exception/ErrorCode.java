@@ -39,6 +39,7 @@ public enum ErrorCode {
     CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "Concurrent modification detected on wallet"),
     IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "Idempotency key was used with a different transfer payload"),
     TRANSFER_IN_PROGRESS(HttpStatus.CONFLICT, "Transfer request is being processed"),
+    LEGACY_FRACTIONAL_MONEY(HttpStatus.CONFLICT, "Legacy fractional money requires reconciliation before further writes"),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 

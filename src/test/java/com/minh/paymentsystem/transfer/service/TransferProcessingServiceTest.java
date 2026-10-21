@@ -61,7 +61,7 @@ class TransferProcessingServiceTest {
 
     @BeforeEach
     void setUp() {
-        request = new TransferRequest("recipient@example.com", new BigDecimal("1000.50"), null);
+        request = new TransferRequest("recipient@example.com", new BigDecimal("1000"), null);
         sender = User.builder().id(1L).email("sender@example.com").status(UserStatus.ACTIVE).build();
         recipient = User.builder().id(2L).email(request.toEmail()).status(UserStatus.ACTIVE).build();
         senderWallet = Wallet.builder().id(10L).user(sender).balance(new BigDecimal("5000")).build();
@@ -97,13 +97,13 @@ class TransferProcessingServiceTest {
 
     @Test
     void shouldReplayReceiptWithoutReadingCurrentWallets() {
-        instruction.markSucceeded(Transaction.builder().id(100L).build(), new BigDecimal("3999.50"), LocalDateTime.now());
+        instruction.markSucceeded(Transaction.builder().id(100L).build(), new BigDecimal("4000"), LocalDateTime.now());
 
         var response = service.process(1L, KEY,
-                new TransferRequest(request.toEmail(), new BigDecimal("1000.5"), null));
+                new TransferRequest(request.toEmail(), new BigDecimal("1000.00"), null));
 
         assertThat(response.result().transactionId()).isEqualTo(100L);
-        assertThat(response.result().fromWalletBalance()).isEqualByComparingTo("3999.50");
+        assertThat(response.result().fromWalletBalance()).isEqualByComparingTo("4000");
         verify(repository, never()).findByIdForUpdate(any());
         verifyNoInteractions(userService, walletService, transactionService);
     }
@@ -194,7 +194,7 @@ class TransferProcessingServiceTest {
 
         assertThat(response.state()).isEqualTo(TransferRequestState.SUCCEEDED);
         assertThat(response.result().transactionId()).isEqualTo(100L);
-        assertThat(response.result().fromWalletBalance()).isEqualByComparingTo("3999.50");
+        assertThat(response.result().fromWalletBalance()).isEqualByComparingTo("4000");
         assertThat(outgoing.getRelatedTransactionId()).isEqualTo(200L);
         assertThat(incoming.getRelatedTransactionId()).isEqualTo(100L);
         verify(walletService).credit(20L, request.amount());
@@ -206,5 +206,18 @@ class TransferProcessingServiceTest {
         when(userService.findUserByEmail(request.toEmail())).thenReturn(Optional.of(recipient));
         when(walletService.findWalletByUserId(1L)).thenReturn(Optional.of(senderWallet));
         when(walletService.findWalletByUserId(2L)).thenReturn(Optional.of(recipientWallet));
+    }
+
+    @Test
+    void shouldKeepRequestPendingWhenRecipientBalanceRequiresReconciliation() {
+        prepareWallets();
+        recipientWallet.setBalance(new BigDecimal("0.50"));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.process(1L, KEY, request));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.LEGACY_FRACTIONAL_MONEY);
+        assertThat(instruction.getState()).isEqualTo(TransferRequestState.PENDING);
+        verify(walletService, never()).debit(any(), any());
+        verify(walletService, never()).credit(any(), any());
     }
 }

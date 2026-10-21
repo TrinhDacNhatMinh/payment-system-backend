@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.common.validation.WholeVnd;
 import com.minh.paymentsystem.payment.dto.DepositRequest;
 import com.minh.paymentsystem.payment.dto.DepositResponse;
 import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
@@ -74,6 +75,11 @@ public class PaymentServiceImpl implements PaymentService {
             return new VnpayCallbackResponse("02", "Order already confirmed");
         }
 
+        if (!WholeVnd.isWhole(paymentOrder.getAmount())) {
+            throw new BusinessException(ErrorCode.LEGACY_FRACTIONAL_MONEY);
+        }
+        WholeVnd.requirePositiveAmount(paymentOrder.getAmount());
+
         String vnpResponseCode = params.get("vnp_ResponseCode");
         Wallet wallet = walletService.getWalletByUserId(paymentOrder.getUser().getId());
 
@@ -111,6 +117,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void validateDepositAmount(BigDecimal amount) {
+        WholeVnd.requirePositiveAmount(amount);
         if (amount.compareTo(MIN_AMOUNT) < 0 || amount.compareTo(MAX_AMOUNT) > 0) {
             throw new BusinessException(ErrorCode.AMOUNT_OUT_OF_RANGE);
         }

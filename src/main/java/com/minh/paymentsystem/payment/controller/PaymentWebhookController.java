@@ -28,7 +28,8 @@ public class PaymentWebhookController {
     @Operation(summary = "VNPay IPN Webhook", description = "Server-to-server callback from VNPay to update order status")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully processed webhook"),
-            @ApiResponse(responseCode = "404", description = "Payment order or wallet not found")
+            @ApiResponse(responseCode = "404", description = "Payment order or wallet not found"),
+            @ApiResponse(responseCode = "409", description = "LEGACY_FRACTIONAL_MONEY: pending order or wallet contains fractional money and requires reconciliation; no rounding or partial credit")
     })
     @GetMapping("/vnpay-webhook")
     public ResponseEntity<VnpayCallbackResponse> handleVnpayWebhook(@RequestParam Map<String, String> params) {

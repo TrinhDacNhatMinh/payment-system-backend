@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.common.dto.PageResponse;
+import com.minh.paymentsystem.common.validation.WholeVnd;
 import com.minh.paymentsystem.transaction.dto.AdminTransactionFilterRequest;
 import com.minh.paymentsystem.transaction.dto.CreateTransactionCommand;
 import com.minh.paymentsystem.transaction.dto.TransactionFilterRequest;
@@ -32,6 +33,7 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     @Transactional
     public Transaction createTransaction(CreateTransactionCommand command) {
+        WholeVnd.requirePositiveAmount(command.amount());
         log.debug("Creating transaction for wallet {} with type {}, status {} and amount {}", command.wallet().getId(), command.type(), command.status(), command.amount());
 
         Transaction transaction = Transaction.builder()

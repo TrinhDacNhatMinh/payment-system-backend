@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.Check;
+import org.hibernate.annotations.Checks;
 
 import com.minh.paymentsystem.common.entity.AuditableEntity;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
@@ -23,7 +24,10 @@ import com.minh.paymentsystem.wallet.entity.Wallet;
 
 @Entity
 @Table(name = "transactions")
-@Check(name = "ck_transactions_amount_positive", constraints = "amount > 0")
+@Checks({
+        @Check(name = "ck_transactions_amount_positive", constraints = "amount > 0"),
+        @Check(name = "ck_transactions_whole_vnd", constraints = "amount = floor(amount)")
+})
 @Getter
 @Setter
 @NoArgsConstructor

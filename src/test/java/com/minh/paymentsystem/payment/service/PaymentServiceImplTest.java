@@ -131,6 +131,29 @@ class PaymentServiceImplTest {
         assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.PENDING);
     }
 
+    @Test
+    void shouldRejectFractionalDepositBeforeCreatingAnOrder() {
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> paymentService.createDepositOrder(1L, new DepositRequest(new BigDecimal("10000.001")), "127.0.0.1"));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AMOUNT_OUT_OF_RANGE);
+        verifyNoInteractions(paymentOrderRepository, paymentGatewayService, walletService, transactionService);
+    }
+
+    @Test
+    void shouldLeaveLegacyFractionalPendingOrderUnchangedOnCallback() {
+        pendingOrder.setAmount(new BigDecimal("50000.50"));
+        when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
+        when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> paymentService.handleCallback(callbackParams));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.LEGACY_FRACTIONAL_MONEY);
+        assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.PENDING);
+        assertThat(pendingOrder.getAmount()).isEqualByComparingTo("50000.50");
+        verifyNoInteractions(walletService, transactionService);
+    }
+
     @Nested
     @DisplayName("createDepositOrder()")
     class CreateDepositOrderTests {

@@ -22,6 +22,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
@@ -38,6 +39,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.transaction.entity.Transaction;
+import com.minh.paymentsystem.transaction.enums.TransactionStatus;
+import com.minh.paymentsystem.transaction.enums.TransactionType;
 import com.minh.paymentsystem.transaction.repository.TransactionRepository;
 import com.minh.paymentsystem.transaction.service.TransactionServiceImpl;
 import com.minh.paymentsystem.transfer.dto.TransferRequest;
@@ -83,6 +87,10 @@ class TransferIdempotencyIT {
     @Autowired
     private TransferRegistrationService registrationService;
     @Autowired
+    private TransferProcessingService processingService;
+    @Autowired
+    private ObjectMapper objectMapper;
+    @Autowired
     private TransferInstructionRepository instructionRepository;
     @Autowired
     private UserRepository userRepository;
@@ -116,7 +124,7 @@ class TransferIdempotencyIT {
         recipient = userRepository.save(user("recipient@example.com"));
         senderWallet = walletRepository.save(Wallet.builder().user(sender).balance(new BigDecimal("10000.00")).build());
         walletRepository.save(Wallet.builder().user(recipient).balance(BigDecimal.ZERO).build());
-        request = new TransferRequest(recipient.getEmail(), new BigDecimal("1000.50"), "  ");
+        request = new TransferRequest(recipient.getEmail(), new BigDecimal("1000"), "  ");
     }
 
     @AfterEach
@@ -132,11 +140,11 @@ class TransferIdempotencyIT {
         // Discarding the original response models loss after the commit; GET and retry read persisted state.
         TransferResponse restored = transferService.getRequest(sender.getId(), key.toString()).result();
         TransferResponse replay = submit(sender, key,
-                new TransferRequest(" recipient@example.com ", new BigDecimal("1000.5"), "  "));
+                new TransferRequest(" recipient@example.com ", new BigDecimal("1000"), "  "));
 
         assertThat(restored).usingRecursiveComparison().withComparatorForType(BigDecimal::compareTo, BigDecimal.class).isEqualTo(original);
         assertThat(replay).usingRecursiveComparison().withComparatorForType(BigDecimal::compareTo, BigDecimal.class).isEqualTo(restored);
-        assertMoney("8999.50", "1000.50", 2);
+        assertMoney("9000", "1000", 2);
     }
 
     @Test
@@ -144,11 +152,11 @@ class TransferIdempotencyIT {
         UUID key = UUID.randomUUID();
         TransferResponse original = submit(sender, key, request);
 
-        assertMismatch(key, new TransferRequest(request.toEmail(), new BigDecimal("1001.50"), request.description()));
+        assertMismatch(key, new TransferRequest(request.toEmail(), new BigDecimal("1001"), request.description()));
         assertMismatch(key, new TransferRequest("other@example.com", request.amount(), request.description()));
         assertMismatch(key, new TransferRequest(request.toEmail(), request.amount(), null));
         assertThat(transferService.getRequest(sender.getId(), key.toString()).result().transactionId()).isEqualTo(original.transactionId());
-        assertMoney("8999.50", "1000.50", 2);
+        assertMoney("9000", "1000", 2);
     }
 
     @Test
@@ -173,7 +181,7 @@ class TransferIdempotencyIT {
         assertThat(transferService.getRequest(sender.getId(), key.toString()).state()).isEqualTo(TransferRequestState.PENDING);
         assertMoney("10000", "0", 0);
         submit(sender, key, request);
-        assertMoney("8999.50", "1000.50", 2);
+        assertMoney("9000", "1000", 2);
     }
 
     @Test
@@ -188,7 +196,7 @@ class TransferIdempotencyIT {
         assertMoney("10000", "0", 0);
         reset(walletService);
         submit(sender, key, request);
-        assertMoney("8999.50", "1000.50", 2);
+        assertMoney("9000", "1000", 2);
     }
 
     @Test
@@ -205,7 +213,7 @@ class TransferIdempotencyIT {
             jdbc.execute("DROP FUNCTION reject_test_receipt()");
         }
         submit(sender, key, request);
-        assertMoney("8999.50", "1000.50", 2);
+        assertMoney("9000", "1000", 2);
     }
 
     @Test
@@ -233,7 +241,7 @@ class TransferIdempotencyIT {
         }
         TransferResponse completed = first.get(10, TimeUnit.SECONDS);
         assertThat(submit(sender, key, request).transactionId()).isEqualTo(completed.transactionId());
-        assertMoney("8999.50", "1000.50", 2);
+        assertMoney("9000", "1000", 2);
     }
 
     @Test
@@ -258,7 +266,7 @@ class TransferIdempotencyIT {
         assertThat(responses.stream().filter(TransferResponse.class::isInstance).map(TransferResponse.class::cast)
                 .map(TransferResponse::transactionId).toList()).containsOnly(transactionId);
         assertThat(instructionRepository.count()).isEqualTo(1);
-        assertMoney("8999.50", "1000.50", 2);
+        assertMoney("9000", "1000", 2);
     }
 
     @Test
@@ -285,13 +293,13 @@ class TransferIdempotencyIT {
         second.get(15, TimeUnit.SECONDS);
 
         assertThat(successes.get()).isEqualTo(1);
-        assertMoney("8999.50", "1000.50", 2);
+        assertMoney("9000", "1000", 2);
         UUID pendingKey = transferService.getRequest(sender.getId(), firstKey.toString()).state() == TransferRequestState.PENDING
                 ? firstKey
                 : secondKey;
         reset(walletService);
         submit(sender, pendingKey, request);
-        assertMoney("7999.00", "2001.00", 4);
+        assertMoney("8000", "2000", 4);
     }
 
     @Test
@@ -308,6 +316,111 @@ class TransferIdempotencyIT {
         assertThat(reverse.transactionId()).isNotEqualTo(transferService.getRequest(sender.getId(), key.toString()).result().transactionId());
         assertThat(instructionRepository.count()).isEqualTo(2);
         assertMoney("10000", "0", 4);
+    }
+
+    @Test
+    void shouldReadLegacyFractionalReceiptWithoutChangingAnyStoredValue() throws Exception {
+        UUID key = UUID.randomUUID();
+        seedLegacyReceipt(key, new BigDecimal("1000.50"), new BigDecimal("8999.50"));
+        var before = jdbc.queryForMap("SELECT * FROM transfer_requests WHERE idempotency_key = ?", key);
+
+        var snapshot = transferService.getRequest(sender.getId(), key.toString());
+        var json = objectMapper.readTree(objectMapper.writeValueAsString(snapshot));
+
+        assertThat(snapshot.legacyFractional()).isTrue();
+        assertThat(json.at("/request/amount").asText()).isEqualTo("1000.50");
+        assertThat(json.at("/result/amount").asText()).isEqualTo("1000.50");
+        assertThat(json.at("/result/fromWalletBalance").asText()).isEqualTo("8999.50");
+        assertThat(jdbc.queryForMap("SELECT * FROM transfer_requests WHERE idempotency_key = ?", key)).isEqualTo(before);
+        verify(walletService, never()).debit(any(), any());
+        verify(walletService, never()).credit(any(), any());
+    }
+
+    @Test
+    void shouldReplayIntegralLegacyAmountAndKeepFractionalHistoricalBalanceExact() {
+        UUID key = UUID.randomUUID();
+        seedLegacyReceipt(key, new BigDecimal("1000.00"), new BigDecimal("8999.50"));
+        var before = jdbc.queryForMap("SELECT * FROM transfer_requests WHERE idempotency_key = ?", key);
+
+        TransferResponse replay = submit(sender, key, new TransferRequest(recipient.getEmail(), new BigDecimal("1000"), null));
+
+        assertThat(replay.amount()).isEqualByComparingTo("1000");
+        assertThat(replay.fromWalletBalance()).isEqualByComparingTo("8999.50");
+        assertThat(transferService.getRequest(sender.getId(), key.toString()).legacyFractional()).isTrue();
+        assertThat(jdbc.queryForMap("SELECT * FROM transfer_requests WHERE idempotency_key = ?", key)).isEqualTo(before);
+        assertThat(transactionRepository.count()).isEqualTo(2);
+        verify(walletService, never()).debit(any(), any());
+    }
+
+    @Test
+    void shouldNotResumeFractionalLegacyPendingRequestOrReplaceItsPayload() {
+        UUID key = UUID.randomUUID();
+        seedLegacyPending(key, new BigDecimal("1000.50"));
+        var before = jdbc.queryForMap("SELECT * FROM transfer_requests WHERE idempotency_key = ?", key);
+
+        BusinessException legacy = assertThrows(BusinessException.class, () -> processingService.process(sender.getId(), key,
+                new TransferRequest(recipient.getEmail(), new BigDecimal("1000.50"), null)));
+        BusinessException mismatch = assertThrows(BusinessException.class,
+                () -> submit(sender, key, new TransferRequest(recipient.getEmail(), new BigDecimal("1000"), null)));
+
+        assertThat(legacy.getErrorCode()).isEqualTo(ErrorCode.LEGACY_FRACTIONAL_MONEY);
+        assertThat(mismatch.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REUSED);
+        assertThat(transferService.getRequest(sender.getId(), key.toString()).legacyFractional()).isTrue();
+        assertThat(jdbc.queryForMap("SELECT * FROM transfer_requests WHERE idempotency_key = ?", key)).isEqualTo(before);
+        assertMoney("10000", "0", 0);
+    }
+
+    @Test
+    void shouldBlockLegacyRecipientBalanceBeforeDebitAndKeepNewRequestPending() {
+        jdbc.execute("ALTER TABLE wallets DROP CONSTRAINT ck_wallets_whole_vnd");
+        jdbc.update("UPDATE wallets SET balance = 0.50 WHERE user_id = ?", recipient.getId());
+        jdbc.execute("ALTER TABLE wallets ADD CONSTRAINT ck_wallets_whole_vnd CHECK (balance = floor(balance)) NOT VALID");
+        UUID key = UUID.randomUUID();
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> submit(sender, key, request));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.LEGACY_FRACTIONAL_MONEY);
+        assertThat(transferService.getRequest(sender.getId(), key.toString()).state()).isEqualTo(TransferRequestState.PENDING);
+        assertMoney("10000", "0.50", 0);
+        verify(walletService, never()).debit(any(), any());
+    }
+
+    @Test
+    void shouldRejectFractionalStoredValuesAtDatabaseBoundary() {
+        assertThrows(DataIntegrityViolationException.class,
+                () -> jdbc.update("UPDATE wallets SET balance = 1000.50 WHERE id = ?", senderWallet.getId()));
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update(
+                "INSERT INTO payment_orders(user_id, order_id, amount, status, created_at) VALUES (?, ?, 10000.50, 'PENDING', CURRENT_TIMESTAMP)",
+                sender.getId(), UUID.randomUUID().toString()));
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update(
+                "INSERT INTO transactions(wallet_id, type, amount, status, reference_code, created_at) VALUES (?, 'DEPOSIT', 1000.50, 'SUCCESS', ?, CURRENT_TIMESTAMP)",
+                senderWallet.getId(), UUID.randomUUID().toString()));
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update(
+                "INSERT INTO transfer_requests(user_id, operation, payload_schema, idempotency_key, to_email, amount, payload_fingerprint, state, created_at) VALUES (?, 'TRANSFER', 'TRANSFER_V2_INTEGER', ?, ?, 1000.50, ?, 'PENDING', CURRENT_TIMESTAMP)",
+                sender.getId(), UUID.randomUUID(), recipient.getEmail(), "a".repeat(64)));
+        assertMoney("10000", "0", 0);
+    }
+
+    private void seedLegacyPending(UUID key, BigDecimal amount) {
+        jdbc.update("INSERT INTO transfer_requests(user_id, operation, payload_schema, idempotency_key, to_email, amount, payload_fingerprint, state, created_at) VALUES (?, 'TRANSFER', 'TRANSFER_V1', ?, ?, ?, ?, 'PENDING', CURRENT_TIMESTAMP)",
+                sender.getId(), key, recipient.getEmail(), amount, "a".repeat(64));
+    }
+
+    private void seedLegacyReceipt(UUID key, BigDecimal amount, BigDecimal balance) {
+        seedLegacyPending(key, amount);
+        Wallet recipientWallet = walletRepository.findByUserId(recipient.getId()).orElseThrow();
+        jdbc.execute("ALTER TABLE transactions DROP CONSTRAINT ck_transactions_whole_vnd");
+        Transaction outgoing;
+        try {
+            outgoing = transactionRepository.save(Transaction.builder().wallet(senderWallet).type(TransactionType.TRANSFER_OUT)
+                    .amount(amount).status(TransactionStatus.SUCCESS).referenceCode(key + "_OUT").build());
+            transactionRepository.save(Transaction.builder().wallet(recipientWallet).type(TransactionType.TRANSFER_IN)
+                    .amount(amount).status(TransactionStatus.SUCCESS).referenceCode(key + "_IN").build());
+        } finally {
+            jdbc.execute("ALTER TABLE transactions ADD CONSTRAINT ck_transactions_whole_vnd CHECK (amount = floor(amount)) NOT VALID");
+        }
+        jdbc.update("UPDATE transfer_requests SET state = 'SUCCEEDED', transaction_id = ?, receipt_amount = amount, receipt_balance = ?, receipt_status = 'SUCCESS', receipt_created_at = TIMESTAMP '2026-10-20 10:00:00' WHERE idempotency_key = ?",
+                outgoing.getId(), balance, key);
     }
 
     private void submitWithPossibleConflict(UUID key, AtomicInteger successes) {

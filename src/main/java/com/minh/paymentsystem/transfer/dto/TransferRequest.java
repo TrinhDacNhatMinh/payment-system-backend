@@ -1,6 +1,7 @@
 package com.minh.paymentsystem.transfer.dto;
 
 import java.math.BigDecimal;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Email;
@@ -24,10 +25,11 @@ public record TransferRequest(
         @Size(max = 255, message = "Recipient email must not exceed 255 characters")
         String toEmail,
 
-        @Schema(description = "Exact VND amount as a decimal string, from 1000 to 9999999999999999.99; at most two fractional digits, without signs, whitespace, grouping or exponent", type = "string", example = "1000.50", pattern = "[0-9]{1,16}(\\.[0-9]{1,2})?")
+        @Schema(description = "Whole VND amount as an integer string from 1000 to 50000000 inclusive; no decimal point, signs, whitespace, grouping or exponent", type = "string", example = "1000", pattern = "[0-9]{1,16}")
         @NotNull(message = "Amount must not be null")
         @DecimalMin(value = "1000", message = "Amount must be at least 1000 VND")
-        @Digits(integer = 16, fraction = 2, message = "Amount must fit decimal(18,2)")
+        @DecimalMax(value = "50000000", message = "Amount must not exceed 50000000 VND")
+        @Digits(integer = 16, fraction = 0, message = "Amount must be a whole VND value with at most 16 integer digits")
         @JsonDeserialize(using = TransferAmountDeserializer.class)
         @JsonSerialize(using = TransferAmountSerializer.class)
         BigDecimal amount,

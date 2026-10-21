@@ -17,9 +17,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.Check;
+import org.hibernate.annotations.Checks;
 
 import com.minh.paymentsystem.common.entity.AuditableEntity;
 import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.common.validation.WholeVnd;
 import com.minh.paymentsystem.transaction.entity.Transaction;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
 import com.minh.paymentsystem.transfer.enums.TransferRequestState;
@@ -33,16 +35,20 @@ import com.minh.paymentsystem.user.entity.User;
                 "idempotency_key"
         })
 })
-@Check(name = "ck_transfer_requests_state", constraints = "(state = 'PENDING' AND transaction_id IS NULL AND receipt_balance IS NULL AND receipt_amount IS NULL AND receipt_status IS NULL AND receipt_created_at IS NULL AND error_http_status IS NULL AND error_code IS NULL AND error_message IS NULL) OR "
-        + "(state = 'SUCCEEDED' AND transaction_id IS NOT NULL AND receipt_balance IS NOT NULL AND receipt_balance >= 0 AND receipt_amount IS NOT NULL AND receipt_amount = amount AND receipt_status IS NOT NULL AND receipt_status = 'SUCCESS' AND receipt_created_at IS NOT NULL AND error_http_status IS NULL AND error_code IS NULL AND error_message IS NULL) OR "
-        + "(state = 'REJECTED' AND transaction_id IS NULL AND receipt_balance IS NULL AND receipt_amount IS NULL AND receipt_status IS NULL AND receipt_created_at IS NULL AND error_http_status IS NOT NULL AND error_http_status BETWEEN 400 AND 499 AND error_code IS NOT NULL AND error_message IS NOT NULL)")
+@Checks({
+        @Check(name = "ck_transfer_requests_whole_vnd_v2", constraints = "payload_schema <> 'TRANSFER_V2_INTEGER' OR (amount = floor(amount) AND (receipt_amount IS NULL OR receipt_amount = floor(receipt_amount)) AND (receipt_balance IS NULL OR receipt_balance = floor(receipt_balance)))"),
+        @Check(name = "ck_transfer_requests_state", constraints = "(state = 'PENDING' AND transaction_id IS NULL AND receipt_balance IS NULL AND receipt_amount IS NULL AND receipt_status IS NULL AND receipt_created_at IS NULL AND error_http_status IS NULL AND error_code IS NULL AND error_message IS NULL) OR "
+                + "(state = 'SUCCEEDED' AND transaction_id IS NOT NULL AND receipt_balance IS NOT NULL AND receipt_balance >= 0 AND receipt_amount IS NOT NULL AND receipt_amount = amount AND receipt_status IS NOT NULL AND receipt_status = 'SUCCESS' AND receipt_created_at IS NOT NULL AND error_http_status IS NULL AND error_code IS NULL AND error_message IS NULL) OR "
+                + "(state = 'REJECTED' AND transaction_id IS NULL AND receipt_balance IS NULL AND receipt_amount IS NULL AND receipt_status IS NULL AND receipt_created_at IS NULL AND error_http_status IS NOT NULL AND error_http_status BETWEEN 400 AND 499 AND error_code IS NOT NULL AND error_message IS NOT NULL)")
+})
 @Getter
 @SuperBuilder
 @NoArgsConstructor
 public class TransferInstruction extends AuditableEntity {
 
     public static final String OPERATION = "TRANSFER";
-    public static final String PAYLOAD_SCHEMA = "TRANSFER_V1";
+    public static final String LEGACY_PAYLOAD_SCHEMA = "TRANSFER_V1";
+    public static final String PAYLOAD_SCHEMA = "TRANSFER_V2_INTEGER";
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false, updatable = false)
@@ -101,6 +107,8 @@ public class TransferInstruction extends AuditableEntity {
 
     public void markSucceeded(Transaction outgoing, BigDecimal balance, LocalDateTime completedAt) {
         requirePending();
+        WholeVnd.requirePositiveAmount(amount);
+        WholeVnd.requireWritableBalance(balance);
         transaction = outgoing;
         receiptBalance = balance;
         receiptAmount = amount;

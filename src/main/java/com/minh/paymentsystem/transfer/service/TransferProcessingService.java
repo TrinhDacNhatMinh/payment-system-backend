@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
+import com.minh.paymentsystem.common.validation.WholeVnd;
 import com.minh.paymentsystem.transaction.dto.CreateTransactionCommand;
 import com.minh.paymentsystem.transaction.entity.Transaction;
 import com.minh.paymentsystem.transaction.enums.TransactionStatus;
@@ -26,6 +27,7 @@ import com.minh.paymentsystem.transaction.service.TransactionService;
 import com.minh.paymentsystem.transfer.dto.TransferRequest;
 import com.minh.paymentsystem.transfer.dto.TransferRequestError;
 import com.minh.paymentsystem.transfer.dto.TransferRequestResponse;
+import com.minh.paymentsystem.transfer.dto.TransferRequestSnapshot;
 import com.minh.paymentsystem.transfer.dto.TransferResponse;
 import com.minh.paymentsystem.transfer.entity.TransferInstruction;
 import com.minh.paymentsystem.transfer.enums.TransferRequestState;
@@ -56,6 +58,10 @@ public class TransferProcessingService {
         if (instruction.getState() != TransferRequestState.PENDING) {
             return toResponse(instruction);
         }
+        if (!WholeVnd.isWhole(instruction.getAmount())) {
+            throw new BusinessException(ErrorCode.LEGACY_FRACTIONAL_MONEY);
+        }
+        WholeVnd.requirePositiveAmount(request.amount());
         instruction = lockInstruction(instruction.getId());
         validatePayload(instruction, request);
         if (instruction.getState() != TransferRequestState.PENDING) {
@@ -88,7 +94,8 @@ public class TransferProcessingService {
     }
 
     private void validatePayload(TransferInstruction instruction, TransferRequest request) {
-        if (!TransferInstruction.PAYLOAD_SCHEMA.equals(instruction.getPayloadSchema())
+        if (!(TransferInstruction.PAYLOAD_SCHEMA.equals(instruction.getPayloadSchema())
+                || TransferInstruction.LEGACY_PAYLOAD_SCHEMA.equals(instruction.getPayloadSchema()))
                 || !instruction.getToEmail().equals(request.toEmail())
                 || instruction.getAmount().compareTo(request.amount()) != 0
                 || !Objects.equals(instruction.getDescription(), request.description())) {
@@ -125,6 +132,8 @@ public class TransferProcessingService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
         Wallet recipientWallet = walletService.findWalletByUserId(recipient.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.WALLET_NOT_FOUND));
+        WholeVnd.requireWritableBalance(senderWallet.getBalance());
+        WholeVnd.requireWritableBalance(recipientWallet.getBalance());
         if (senderWallet.getBalance().compareTo(request.amount()) < 0) {
             throw new BusinessException(ErrorCode.WALLET_INSUFFICIENT_BALANCE);
         }
@@ -170,8 +179,9 @@ public class TransferProcessingService {
         }
         return new TransferRequestResponse(
                 instruction.getIdempotencyKey(), instruction.getState(),
-                new TransferRequest(instruction.getToEmail(), instruction.getAmount(), instruction.getDescription()),
-                result, error);
+                new TransferRequestSnapshot(instruction.getToEmail(), instruction.getAmount(), instruction.getDescription()),
+                result, error, !WholeVnd.isWhole(instruction.getAmount())
+                        || (result != null && (!WholeVnd.isWhole(result.amount()) || !WholeVnd.isWhole(result.fromWalletBalance()))));
     }
 
     private record TransferWallets(

@@ -77,6 +77,19 @@ class VnpayGatewayServiceImplTest {
     }
 
     @Test
+    void shouldRejectFractionalPaymentAmountRatherThanTruncateIt() {
+        assertThatThrownBy(() -> gateway.buildPaymentUrl("ORDER_1", new BigDecimal("10000.001"), "127.0.0.1"))
+                .isInstanceOf(com.minh.paymentsystem.common.exception.BusinessException.class);
+    }
+
+    @Test
+    void shouldEncodeWholeDatabaseScaleWithoutDecimalZeros() {
+        String url = gateway.buildPaymentUrl("ORDER_1", new BigDecimal("10000.00"), "127.0.0.1");
+
+        assertThat(url).contains("vnp_Amount=1000000&");
+    }
+
+    @Test
     void shouldRejectTamperedCallback() {
         Map<String, String> parameters = Map.of(
                 "vnp_TxnRef", "ORDER_1",

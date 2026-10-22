@@ -1,23 +1,30 @@
 package com.minh.paymentsystem.payment.service;
 
-import java.util.Map;
+import java.net.URI;
+import java.util.List;
 
+import org.springframework.util.MultiValueMap;
+
+import com.minh.paymentsystem.payment.dto.DepositOrderResponse;
 import com.minh.paymentsystem.payment.dto.DepositRequest;
-import com.minh.paymentsystem.payment.dto.DepositResponse;
 import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
 
 public interface PaymentService {
-    DepositResponse createDepositOrder(Long userId, DepositRequest request, String ipAddress);
+    DepositOrderResponse createDepositOrder(Long userId, List<String> keys, DepositRequest request, String ipAddress);
+
+    DepositOrderResponse getOrder(Long userId, String orderId);
+
+    DepositOrderResponse getDepositRequest(Long userId, String key);
 
     /**
      * IPN Webhook callback from VNPay.
-     * Needs to be implemented with Idempotency logic and verifyChecksum.
+     * Validates the notification and commits order, wallet and transaction atomically.
      */
-    VnpayCallbackResponse handleCallback(Map<String, String> params);
+    VnpayCallbackResponse handleCallback(MultiValueMap<String, String> params);
 
     /**
      * Return URL redirect for user.
-     * Can optionally share logic with handleCallback or just verify and return status.
+     * Verifies return data without changing payment state or wallet balance.
      */
-    String processReturn(Map<String, String> params);
+    URI processReturn(MultiValueMap<String, String> params);
 }

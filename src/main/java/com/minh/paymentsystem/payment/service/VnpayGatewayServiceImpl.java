@@ -5,15 +5,14 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -26,6 +25,8 @@ import com.minh.paymentsystem.common.validation.WholeVnd;
 @Service
 @Slf4j
 public class VnpayGatewayServiceImpl implements PaymentGatewayService {
+
+    private static final DateTimeFormatter GATEWAY_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     @Value("${vnpay.tmn-code:VNPAY001}")
     private String vnpTmnCode;
@@ -40,11 +41,17 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
     private String vnpReturnUrl;
 
     @Override
-    public String buildPaymentUrl(String orderId, BigDecimal amount, String ipAddress) {
+    public String buildPaymentUrl(String orderId, BigDecimal amount, String ipAddress, LocalDateTime createdAt, LocalDateTime expiresAt) {
         WholeVnd.requirePositiveAmount(amount);
         log.debug("Building payment URL for order {}, amount {}", orderId, amount);
-        Map<String, String> vnpParams = createPaymentParameters(orderId, amount, ipAddress);
+        Map<String, String> vnpParams = createPaymentParameters(orderId, amount, ipAddress, createdAt, expiresAt);
         return vnpUrl + "?" + buildSignedQuery(vnpParams);
+    }
+
+    @Override
+    public boolean matchesMerchant(Map<String, String> params) {
+        return vnpTmnCode.equals(params.get("vnp_TmnCode"))
+                && (!params.containsKey("vnp_CurrCode") || "VND".equals(params.get("vnp_CurrCode")));
     }
 
     @Override
@@ -63,7 +70,8 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
         return calculatedHash.equalsIgnoreCase(vnpSecureHash);
     }
 
-    private Map<String, String> createPaymentParameters(String orderId, BigDecimal amount, String ipAddress) {
+    private Map<String, String> createPaymentParameters(String orderId, BigDecimal amount, String ipAddress,
+            LocalDateTime createdAt, LocalDateTime expiresAt) {
         Map<String, String> vnpParams = new HashMap<>();
         vnpParams.put("vnp_Version", "2.1.0");
         vnpParams.put("vnp_Command", "pay");
@@ -81,12 +89,8 @@ public class VnpayGatewayServiceImpl implements PaymentGatewayService {
         vnpParams.put("vnp_ReturnUrl", vnpReturnUrl);
         vnpParams.put("vnp_IpAddr", ipAddress);
 
-        // Date format: yyyyMMddHHmmss with GMT+7
-        Date dt = new Date();
-        SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
-        formatter.setTimeZone(TimeZone.getTimeZone("GMT+7"));
-        String dateString = formatter.format(dt);
-        vnpParams.put("vnp_CreateDate", dateString);
+        vnpParams.put("vnp_CreateDate", createdAt.format(GATEWAY_DATE_FORMAT));
+        vnpParams.put("vnp_ExpireDate", expiresAt.format(GATEWAY_DATE_FORMAT));
         return vnpParams;
     }
 

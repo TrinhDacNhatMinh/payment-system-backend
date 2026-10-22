@@ -116,7 +116,11 @@ class TransferSecurityTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"999", "50000001", "9999999999999999"})
+    @ValueSource(strings = {
+            "999",
+            "50000001",
+            "9999999999999999"
+    })
     void shouldRejectAmountsOutsideTransferLimitsBeforeCallingService(String amount) throws Exception {
         mvc.perform(post("/api/v1/transfer").with(authentication(principal()))
                 .header("Idempotency-Key", KEY).contentType(MediaType.APPLICATION_JSON)

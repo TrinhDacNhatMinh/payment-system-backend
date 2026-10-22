@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HexFormat;
@@ -23,6 +24,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 class VnpayGatewayServiceImplTest {
 
     private static final String CALLBACK_HASH = "74f277b7349ed844f7fce71a365fd9c47087e780ba1050687f1f96f3da393492c6d654bf16852e6c9cc85a920972861d26ba9db99e73fab5a0cdb8a4b58b3ee3";
+    private static final LocalDateTime CREATED_AT = LocalDateTime.of(2026, 10, 22, 12, 0);
+    private static final LocalDateTime EXPIRES_AT = CREATED_AT.plusMinutes(15);
     private final VnpayGatewayServiceImpl gateway = new VnpayGatewayServiceImpl();
 
     @BeforeEach
@@ -35,7 +38,7 @@ class VnpayGatewayServiceImplTest {
 
     @Test
     void shouldBuildEncodedPaymentUrlWithMatchingSignature() throws Exception {
-        String url = gateway.buildPaymentUrl("ORDER 1&x", new BigDecimal("50000"), "127.0.0.1");
+        String url = gateway.buildPaymentUrl("ORDER 1&x", new BigDecimal("50000"), "127.0.0.1", CREATED_AT, EXPIRES_AT);
 
         assertThat(url).startsWith("https://sandbox.example.com/pay?");
         String rawQuery = URI.create(url).getRawQuery();
@@ -58,7 +61,8 @@ class VnpayGatewayServiceImplTest {
                 .containsEntry("vnp_Locale", "vn")
                 .containsEntry("vnp_CurrCode", "VND")
                 .containsEntry("vnp_OrderType", "topup");
-        assertThat(parameters.get("vnp_CreateDate")).matches("\\d{14}");
+        assertThat(parameters.get("vnp_CreateDate")).isEqualTo("20261022120000");
+        assertThat(parameters.get("vnp_ExpireDate")).isEqualTo("20261022121500");
         assertThat(signedData).contains("vnp_TxnRef=ORDER+1%26x");
         assertThat(parameters.get("vnp_SecureHash")).isEqualTo(sign(signedData));
     }
@@ -78,13 +82,13 @@ class VnpayGatewayServiceImplTest {
 
     @Test
     void shouldRejectFractionalPaymentAmountRatherThanTruncateIt() {
-        assertThatThrownBy(() -> gateway.buildPaymentUrl("ORDER_1", new BigDecimal("10000.001"), "127.0.0.1"))
+        assertThatThrownBy(() -> gateway.buildPaymentUrl("ORDER_1", new BigDecimal("10000.001"), "127.0.0.1", CREATED_AT, EXPIRES_AT))
                 .isInstanceOf(com.minh.paymentsystem.common.exception.BusinessException.class);
     }
 
     @Test
     void shouldEncodeWholeDatabaseScaleWithoutDecimalZeros() {
-        String url = gateway.buildPaymentUrl("ORDER_1", new BigDecimal("10000.00"), "127.0.0.1");
+        String url = gateway.buildPaymentUrl("ORDER_1", new BigDecimal("10000.00"), "127.0.0.1", CREATED_AT, EXPIRES_AT);
 
         assertThat(url).contains("vnp_Amount=1000000&");
     }
@@ -106,6 +110,14 @@ class VnpayGatewayServiceImplTest {
     }
 
     @Test
+    void shouldRequireConfiguredMerchantAndVndCurrencyWhenPresent() {
+        assertThat(gateway.matchesMerchant(Map.of("vnp_TmnCode", "TESTCODE"))).isTrue();
+        assertThat(gateway.matchesMerchant(Map.of("vnp_TmnCode", "OTHER"))).isFalse();
+        assertThat(gateway.matchesMerchant(Map.of("vnp_TmnCode", "TESTCODE", "vnp_CurrCode", "USD"))).isFalse();
+        assertThat(gateway.matchesMerchant(Map.of("vnp_TmnCode", "TESTCODE", "vnp_CurrCode", "VND"))).isTrue();
+    }
+
+    @Test
     void shouldRejectBlankSignaturesEvenWhenSigningConfigurationIsInvalid() {
         ReflectionTestUtils.setField(gateway, "vnpHashSecret", "");
 
@@ -117,7 +129,7 @@ class VnpayGatewayServiceImplTest {
     void shouldFailUrlCreationWhenSigningFails() {
         ReflectionTestUtils.setField(gateway, "vnpHashSecret", "");
 
-        assertThatThrownBy(() -> gateway.buildPaymentUrl("ORDER_1", new BigDecimal("50000"), "127.0.0.1"))
+        assertThatThrownBy(() -> gateway.buildPaymentUrl("ORDER_1", new BigDecimal("50000"), "127.0.0.1", CREATED_AT, EXPIRES_AT))
                 .isInstanceOf(IllegalStateException.class).hasCauseInstanceOf(IllegalArgumentException.class);
     }
 

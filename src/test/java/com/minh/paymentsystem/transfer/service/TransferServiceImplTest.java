@@ -150,7 +150,10 @@ class TransferServiceImplTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"999", "50000001"})
+    @ValueSource(strings = {
+            "999",
+            "50000001"
+    })
     void shouldRejectOutOfRangeAmountsBeforeRegisteringKey(String amount) {
         try (var factory = Validation.buildDefaultValidatorFactory()) {
             var validatedService = new TransferServiceImpl(registrationService, processingService, factory.getValidator());

@@ -2,283 +2,194 @@ package com.minh.paymentsystem.payment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.net.URI;
+import java.util.List;
+import java.util.UUID;
+import jakarta.validation.Validation;
+import jakarta.validation.ValidatorFactory;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.payment.dto.DepositRequest;
-import com.minh.paymentsystem.payment.dto.DepositResponse;
 import com.minh.paymentsystem.payment.dto.VnpayCallbackResponse;
-import com.minh.paymentsystem.payment.entity.PaymentOrder;
-import com.minh.paymentsystem.payment.enums.PaymentOrderStatus;
-import com.minh.paymentsystem.payment.repository.PaymentOrderRepository;
-import com.minh.paymentsystem.transaction.dto.CreateTransactionCommand;
-import com.minh.paymentsystem.transaction.enums.TransactionStatus;
-import com.minh.paymentsystem.transaction.enums.TransactionType;
-import com.minh.paymentsystem.transaction.service.TransactionService;
-import com.minh.paymentsystem.user.entity.User;
-import com.minh.paymentsystem.user.service.UserService;
-import com.minh.paymentsystem.wallet.entity.Wallet;
-import com.minh.paymentsystem.wallet.service.WalletService;
+import com.minh.paymentsystem.payment.dto.VnpayNotification;
 
-@ExtendWith(MockitoExtension.class)
 class PaymentServiceImplTest {
 
-    @Mock
-    private UserService userService;
-
-    @Mock
-    private PaymentOrderRepository paymentOrderRepository;
-
-    @Mock
-    private PaymentGatewayService paymentGatewayService;
-
-    @Mock
-    private WalletService walletService;
-
-    @Mock
-    private TransactionService transactionService;
-
-    @InjectMocks
-    private PaymentServiceImpl paymentService;
-
-    private User testUser;
-    private Wallet testWallet;
-    private PaymentOrder pendingOrder;
-    private Map<String, String> callbackParams;
+    private static final UUID KEY = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+    private final DepositOrderService orders = mock(DepositOrderService.class);
+    private final PaymentNotificationService notifications = mock(PaymentNotificationService.class);
+    private final PaymentGatewayService gateway = mock(PaymentGatewayService.class);
+    private final PaymentReturnUrl returnUrl = mock(PaymentReturnUrl.class);
+    private ValidatorFactory factory;
+    private PaymentServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        testUser = User.builder()
-                .id(1L)
-                .email("test@example.com")
-                .build();
-        testWallet = Wallet.builder()
-                .id(10L)
-                .user(testUser)
-                .balance(new BigDecimal("100000"))
-                .build();
+        factory = Validation.buildDefaultValidatorFactory();
+        service = new PaymentServiceImpl(orders, notifications, gateway, returnUrl, factory.getValidator());
+    }
 
-        pendingOrder = PaymentOrder.builder()
-                .id(100L)
-                .orderId("VNPAY_123")
-                .user(testUser)
-                .amount(new BigDecimal("50000"))
-                .status(PaymentOrderStatus.PENDING)
-                .build();
+    @AfterEach
+    void closeValidator() {
+        factory.close();
+    }
 
-        callbackParams = new HashMap<>();
-        callbackParams.put("vnp_TxnRef", "VNPAY_123");
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "9999",
+            "50000001",
+            "10000.50",
+            "0",
+            "-10000"
+    })
+    void shouldValidateAmountBeforeRegisteringKey(String amount) {
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.createDepositOrder(
+                1L, List.of(KEY.toString()), new DepositRequest(new BigDecimal(amount)), "127.0.0.1"));
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verifyNoInteractions(orders);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "10000",
+            "50000000"
+    })
+    void shouldAcceptBothAmountBoundaries(String amount) {
+        DepositRequest request = new DepositRequest(new BigDecimal(amount));
+        service.createDepositOrder(1L, List.of(KEY.toString()), request, "127.0.0.1");
+        verify(orders).createOrReplay(1L, KEY, request.amount(), "127.0.0.1");
     }
 
     @Test
-    void shouldRejectUnverifiedReturnWithoutLookingUpOrder() {
-        when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(false);
-
-        assertThat(paymentService.processReturn(callbackParams)).isEqualTo("Invalid checksum. Payment verification failed.");
-
-        verifyNoInteractions(paymentOrderRepository, walletService, transactionService);
+    void shouldRejectMissingOrMultipleKeysBeforeCreatingOrder() {
+        DepositRequest request = new DepositRequest(new BigDecimal("10000"));
+        assertThrows(BusinessException.class, () -> service.createDepositOrder(1L, null, request, "127.0.0.1"));
+        assertThrows(BusinessException.class, () -> service.createDepositOrder(1L, List.of(KEY.toString(), KEY.toString()), request, "127.0.0.1"));
+        verifyNoInteractions(orders);
     }
 
     @Test
-    void shouldKeepMissingOrderErrorForVerifiedReturn() {
-        when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
-        when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.empty());
-
-        BusinessException exception = assertThrows(BusinessException.class, () -> paymentService.processReturn(callbackParams));
-
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_ORDER_NOT_FOUND);
-        verifyNoInteractions(walletService, transactionService);
+    void shouldReadUniqueWinnerAfterInsertTransactionHasRolledBack() {
+        BigDecimal amount = new BigDecimal("10000");
+        DataIntegrityViolationException conflict = new DataIntegrityViolationException("duplicate key");
+        when(orders.createOrReplay(1L, KEY, amount, "127.0.0.1"))
+                .thenThrow(conflict);
+        service.createDepositOrder(1L, List.of(KEY.toString()), new DepositRequest(amount), "127.0.0.1");
+        var ordered = inOrder(orders);
+        ordered.verify(orders).createOrReplay(1L, KEY, amount, "127.0.0.1");
+        ordered.verify(orders).replayAfterConflict(1L, KEY, amount, conflict);
     }
 
     @Test
-    void shouldReturnSuccessfulPaymentMessageWithoutUpdatingWallet() {
-        callbackParams.put("vnp_ResponseCode", "00");
-        when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
-        when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
-
-        assertThat(paymentService.processReturn(callbackParams)).isEqualTo("Payment successful for order: VNPAY_123");
-
-        verifyNoInteractions(walletService, transactionService);
-        assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.PENDING);
+    void shouldRejectDuplicateGatewayParametersBeforeVerification() {
+        MultiValueMap<String, String> params = successParameters();
+        params.add("vnp_Amount", "1");
+        assertThat(service.handleCallback(params).rspCode()).isEqualTo("99");
+        verifyNoInteractions(gateway, notifications);
     }
 
     @Test
-    void shouldReturnFailedPaymentMessageWithoutUpdatingWallet() {
-        callbackParams.put("vnp_ResponseCode", "24");
-        when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
-        when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
-
-        assertThat(paymentService.processReturn(callbackParams)).isEqualTo("Payment failed for order: VNPAY_123");
-
-        verifyNoInteractions(walletService, transactionService);
-        assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.PENDING);
+    void shouldRejectInvalidChecksumBeforeDatabaseWork() {
+        assertThat(service.handleCallback(successParameters()).rspCode()).isEqualTo("97");
+        verifyNoInteractions(notifications);
     }
 
     @Test
-    void shouldRejectFractionalDepositBeforeCreatingAnOrder() {
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> paymentService.createDepositOrder(1L, new DepositRequest(new BigDecimal("10000.001")), "127.0.0.1"));
+    void shouldRejectWrongMerchantBeforeDatabaseWork() {
+        when(gateway.verifyChecksum(any())).thenReturn(true);
+        assertThat(service.handleCallback(successParameters()).rspCode()).isEqualTo("99");
+        verifyNoInteractions(notifications);
+    }
 
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AMOUNT_OUT_OF_RANGE);
-        verifyNoInteractions(paymentOrderRepository, paymentGatewayService, walletService, transactionService);
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "20260230120000",
+            "invalid",
+            ""
+    })
+    void shouldRejectSuccessWithInvalidPaymentDate(String date) {
+        verifyGateway();
+        MultiValueMap<String, String> params = successParameters();
+        params.set("vnp_PayDate", date);
+        assertThat(service.handleCallback(params).rspCode()).isEqualTo("99");
+        verifyNoInteractions(notifications);
     }
 
     @Test
-    void shouldLeaveLegacyFractionalPendingOrderUnchangedOnCallback() {
-        pendingOrder.setAmount(new BigDecimal("50000.50"));
-        when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
-        when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
-
-        BusinessException exception = assertThrows(BusinessException.class, () -> paymentService.handleCallback(callbackParams));
-
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.LEGACY_FRACTIONAL_MONEY);
-        assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.PENDING);
-        assertThat(pendingOrder.getAmount()).isEqualByComparingTo("50000.50");
-        verifyNoInteractions(walletService, transactionService);
+    void shouldReturnGatewayFailureAfterWorkerLockOrCommitError() {
+        verifyGateway();
+        when(notifications.process(any())).thenThrow(new PessimisticLockingFailureException("busy"))
+                .thenThrow(new DataIntegrityViolationException("commit failed"));
+        assertThat(service.handleCallback(successParameters()).rspCode()).isEqualTo("99");
+        assertThat(service.handleCallback(successParameters()).rspCode()).isEqualTo("99");
     }
 
-    @Nested
-    @DisplayName("createDepositOrder()")
-    class CreateDepositOrderTests {
-
-        @Test
-        void createDepositOrder_amountTooLow_throwsBusinessException() {
-            // given
-            DepositRequest request = new DepositRequest(new BigDecimal("5000"));
-
-            // when & then
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> paymentService.createDepositOrder(1L, request, "127.0.0.1"));
-            assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.AMOUNT_OUT_OF_RANGE);
-        }
-
-        @Test
-        void createDepositOrder_amountTooHigh_throwsBusinessException() {
-            // given
-            DepositRequest request = new DepositRequest(new BigDecimal("100000000"));
-
-            // when & then
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> paymentService.createDepositOrder(1L, request, "127.0.0.1"));
-            assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.AMOUNT_OUT_OF_RANGE);
-        }
-
-        @Test
-        void createDepositOrder_validAmount_createsPendingOrderAndReturnsUrl() {
-            // given
-            DepositRequest request = new DepositRequest(new BigDecimal("50000"));
-            when(userService.getUserById(1L)).thenReturn(testUser);
-            when(paymentGatewayService.buildPaymentUrl(anyString(), eq(request.amount()), eq("127.0.0.1")))
-                    .thenReturn("http://vnpay.vn/pay?id=123");
-
-            ArgumentCaptor<PaymentOrder> orderCaptor = ArgumentCaptor.forClass(PaymentOrder.class);
-
-            // when
-            DepositResponse response = paymentService.createDepositOrder(1L, request, "127.0.0.1");
-
-            // then
-            verify(paymentOrderRepository, times(1)).save(orderCaptor.capture());
-            assertThat(orderCaptor.getValue().getStatus()).isEqualTo(PaymentOrderStatus.PENDING);
-            assertThat(orderCaptor.getValue().getAmount()).isEqualByComparingTo(request.amount());
-
-            assertThat(response.paymentUrl()).isEqualTo("http://vnpay.vn/pay?id=123");
-            assertThat(response.orderId()).isNotNull();
-        }
+    @Test
+    void shouldReturnAcknowledgementOnlyAfterWorkerReturns() {
+        verifyGateway();
+        when(notifications.process(any())).thenReturn(new VnpayCallbackResponse("00", "Confirm Success"));
+        assertThat(service.handleCallback(successParameters()).rspCode()).isEqualTo("00");
+        verify(notifications).process(any(VnpayNotification.class));
     }
 
-    @Nested
-    @DisplayName("handleCallback()")
-    class HandleCallbackTests {
+    @Test
+    void shouldRedirectVerifiedReturnWithoutProcessingNotification() {
+        verifyGateway();
+        when(notifications.matchesReturn(any())).thenReturn(true);
+        URI target = URI.create("http://localhost:5173/payment/result?orderId=ORDER_1");
+        when(returnUrl.forOrder("ORDER_1")).thenReturn(target);
+        assertThat(service.processReturn(successParameters())).isEqualTo(target);
+        verify(notifications, never()).process(any());
+        verifyNoInteractions(orders);
+    }
 
-        @Test
-        void handleCallback_invalidChecksum_returnsErrorResponse() {
-            // given
-            when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(false);
+    @Test
+    void shouldRedirectUnverifiedReturnWithoutExposingOrderId() {
+        URI invalid = URI.create("http://localhost:5173/payment/result?verification=invalid");
+        when(returnUrl.invalid()).thenReturn(invalid);
+        assertThat(service.processReturn(successParameters())).isEqualTo(invalid);
+        verifyNoInteractions(notifications);
+    }
 
-            // when
-            VnpayCallbackResponse response = paymentService.handleCallback(callbackParams);
+    @Test
+    void shouldReportReturnVerificationUnavailableOnDatabaseFailure() {
+        verifyGateway();
+        when(notifications.matchesReturn(any())).thenThrow(new IllegalStateException("database unavailable"));
+        URI unavailable = URI.create("http://localhost:5173/payment/result?verification=unavailable");
+        when(returnUrl.unavailable()).thenReturn(unavailable);
+        assertThat(service.processReturn(successParameters())).isEqualTo(unavailable);
+    }
 
-            // then
-            assertThat(response.rspCode()).isEqualTo("97");
-            assertThat(response.message()).isEqualTo("Invalid Checksum");
-            verify(paymentOrderRepository, never()).findByOrderId(anyString());
-        }
+    private void verifyGateway() {
+        when(gateway.verifyChecksum(any())).thenReturn(true);
+        when(gateway.matchesMerchant(any())).thenReturn(true);
+    }
 
-        @Test
-        void handleCallback_orderAlreadyProcessed_doesNotCreditWalletAgain() {
-            // given
-            when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
-            pendingOrder.setStatus(PaymentOrderStatus.SUCCESS);
-            when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
-
-            // when
-            VnpayCallbackResponse response = paymentService.handleCallback(callbackParams);
-
-            // then
-            assertThat(response.rspCode()).isEqualTo("02");
-            assertThat(response.message()).isEqualTo("Order already confirmed");
-
-            verify(walletService, never()).credit(any(), any());
-            verify(transactionService, never()).createTransaction(any(CreateTransactionCommand.class));
-        }
-
-        @Test
-        void handleCallback_vnpaySuccess_updatesOrderToSuccessAndCreditsWallet() {
-            // given
-            callbackParams.put("vnp_ResponseCode", "00");
-            when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
-            when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
-            when(walletService.getWalletByUserId(1L)).thenReturn(testWallet);
-
-            // when
-            VnpayCallbackResponse response = paymentService.handleCallback(callbackParams);
-
-            // then
-            assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.SUCCESS);
-            verify(walletService, times(1)).credit(10L, new BigDecimal("50000"));
-            verify(transactionService, times(1)).createTransaction(new CreateTransactionCommand(
-                    testWallet, TransactionType.DEPOSIT, TransactionStatus.SUCCESS,
-                    new BigDecimal("50000"), "VNPAY_123", "VNPay deposit successful"));
-
-            assertThat(response.rspCode()).isEqualTo("00");
-        }
-
-        @Test
-        void handleCallback_vnpayFailed_updatesOrderToFailedAndDoesNotCreditWallet() {
-            // given
-            callbackParams.put("vnp_ResponseCode", "24"); // Some error code
-            when(paymentGatewayService.verifyChecksum(callbackParams)).thenReturn(true);
-            when(paymentOrderRepository.findByOrderId("VNPAY_123")).thenReturn(Optional.of(pendingOrder));
-            when(walletService.getWalletByUserId(1L)).thenReturn(testWallet);
-
-            // when
-            VnpayCallbackResponse response = paymentService.handleCallback(callbackParams);
-
-            // then
-            assertThat(pendingOrder.getStatus()).isEqualTo(PaymentOrderStatus.FAILED);
-            verify(walletService, never()).credit(any(), any());
-            verify(transactionService, times(1)).createTransaction(new CreateTransactionCommand(
-                    testWallet, TransactionType.DEPOSIT, TransactionStatus.FAILED,
-                    new BigDecimal("50000"), "VNPAY_123", "VNPay deposit failed"));
-
-            assertThat(response.rspCode()).isEqualTo("00");
-        }
+    static MultiValueMap<String, String> successParameters() {
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        params.set("vnp_TxnRef", "ORDER_1");
+        params.set("vnp_Amount", "1000000");
+        params.set("vnp_TmnCode", "TESTCODE");
+        params.set("vnp_ResponseCode", "00");
+        params.set("vnp_TransactionStatus", "00");
+        params.set("vnp_TransactionNo", "123456");
+        params.set("vnp_PayDate", "20261022120000");
+        params.set("vnp_SecureHash", "test-signature");
+        return params;
     }
 }

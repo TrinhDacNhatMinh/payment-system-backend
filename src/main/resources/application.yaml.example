@@ -38,4 +38,5 @@ vnpay:
   hash-secret: your-vnpay-secret
   url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
   return-url: http://localhost:8080/api/v1/payment/vnpay-return
+  frontend-result-url: http://localhost:5173/payment/result # Use a trusted HTTPS URL outside dev/test
 

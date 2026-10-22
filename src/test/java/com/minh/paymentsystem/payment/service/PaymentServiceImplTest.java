@@ -152,7 +152,7 @@ class PaymentServiceImplTest {
         verifyGateway();
         when(notifications.matchesReturn(any())).thenReturn(true);
         URI target = URI.create("http://localhost:5173/payment/result?orderId=ORDER_1");
-        when(returnUrl.forOrder("ORDER_1")).thenReturn(target);
+        when(returnUrl.forVerifiedReturn(eq("ORDER_1"), anyMap())).thenReturn(target);
         assertThat(service.processReturn(successParameters())).isEqualTo(target);
         verify(notifications, never()).process(any());
         verifyNoInteractions(orders);

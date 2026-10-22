@@ -1,7 +1,11 @@
 package com.minh.paymentsystem.payment.service;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
@@ -10,6 +14,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class PaymentReturnUrl {
+
+    private static final int MAX_CALLBACK_LENGTH = 16384;
 
     private final URI target;
 
@@ -36,6 +42,25 @@ public class PaymentReturnUrl {
 
     public URI invalid() {
         return URI.create(target.toASCIIString() + "?verification=invalid");
+    }
+
+    public URI forVerifiedReturn(String orderId, Map<String, String> parameters) {
+        if (!isOrderId(orderId) || !orderId.equals(parameters.get("vnp_TxnRef"))) {
+            return invalid();
+        }
+        String query = parameters.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
+                .collect(Collectors.joining("&"));
+        if (query.length() > MAX_CALLBACK_LENGTH) {
+            return unavailable();
+        }
+        // A fragment is not sent to the frontend server or included in HTTP referrers.
+        return URI.create(forOrder(orderId).toASCIIString() + "#vnpayReturn=" + encode(query));
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     public URI unavailable() {

@@ -40,7 +40,7 @@ public class PaymentWebhookController {
                 .body(response);
     }
 
-    @Operation(summary = "VNPay Return URL", description = "Verifies return data and redirects to a configured frontend /payment/result with only a verified orderId. Invalid data uses verification=invalid without an orderId; temporary errors use verification=unavailable. Never credits the wallet or changes order status; the frontend must perform an authenticated lookup.")
+    @Operation(summary = "VNPay Return URL", description = "Verifies return data and redirects to the configured frontend result with orderId and the signed callback in a URL fragment. The frontend forwards this callback to the IPN endpoint, then performs an authenticated order lookup. Invalid returns never forward callback data. This return handler does not credit the wallet itself.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "303", description = "See Other: trusted frontend result URL; query is not proof of payment")
     })

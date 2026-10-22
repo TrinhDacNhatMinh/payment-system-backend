@@ -103,7 +103,7 @@ public class PaymentServiceImpl implements PaymentService {
             }
             VnpayNotification notification = VnpayNotification.parse(params).orElse(null);
             return notification != null && notificationService.matchesReturn(notification)
-                    ? returnUrl.forOrder(notification.orderId())
+                    ? returnUrl.forVerifiedReturn(notification.orderId(), params)
                     : returnUrl.invalid();
         } catch (RuntimeException exception) {
             log.warn("VNPay return could not be verified: exceptionType={}", exception.getClass().getSimpleName());

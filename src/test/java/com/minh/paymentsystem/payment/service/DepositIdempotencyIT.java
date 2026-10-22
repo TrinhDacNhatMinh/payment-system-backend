@@ -237,7 +237,7 @@ class DepositIdempotencyIT {
     void shouldReturnBeforeIpnWithoutMarkingPaymentSuccessful() {
         DepositOrderResponse created = create();
         assertThat(service.processReturn(notification(created.orderId())).toString())
-                .isEqualTo("http://localhost:5173/payment/result?orderId=" + created.orderId());
+                .startsWith("http://localhost:5173/payment/result?orderId=" + created.orderId() + "#vnpayReturn=");
         assertThat(service.getOrder(owner.getId(), created.orderId()).status()).isEqualTo(PaymentOrderStatus.PENDING);
         assertThat(transactions.count()).isZero();
         assertThat(wallets.findById(wallet.getId()).orElseThrow().getBalance()).isEqualByComparingTo("0");

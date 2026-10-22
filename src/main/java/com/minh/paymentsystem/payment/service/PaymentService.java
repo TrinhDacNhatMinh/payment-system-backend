@@ -24,7 +24,8 @@ public interface PaymentService {
 
     /**
      * Return URL redirect for user.
-     * Verifies return data without changing payment state or wallet balance.
+     * Verifies return data and forwards the signed callback in the frontend URL fragment.
+     * Does not change payment state or wallet balance itself.
      */
     URI processReturn(MultiValueMap<String, String> params);
 }

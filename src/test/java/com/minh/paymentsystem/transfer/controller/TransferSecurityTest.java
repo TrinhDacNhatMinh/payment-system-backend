@@ -31,15 +31,21 @@ import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
 import com.minh.paymentsystem.common.exception.GlobalExceptionHandler;
 import com.minh.paymentsystem.config.SecurityConfig;
+import com.minh.paymentsystem.transfer.dto.RecipientLookupRequest;
+import com.minh.paymentsystem.transfer.dto.RecipientLookupResponse;
 import com.minh.paymentsystem.transfer.dto.TransferRequestResponse;
 import com.minh.paymentsystem.transfer.dto.TransferRequestSnapshot;
 import com.minh.paymentsystem.transfer.enums.TransferRequestState;
+import com.minh.paymentsystem.transfer.service.RecipientLookupService;
 import com.minh.paymentsystem.transfer.service.TransferService;
 import com.minh.paymentsystem.user.entity.Role;
 import com.minh.paymentsystem.user.entity.User;
 import com.minh.paymentsystem.user.entity.UserStatus;
 
-@WebMvcTest(controllers = TransferController.class, properties = {
+@WebMvcTest(controllers = {
+        TransferController.class,
+        TransferRecipientController.class
+}, properties = {
         "auth.allowed-origins=http://localhost:5173",
         "auth.refresh-token-cookie.secure=false"
 })
@@ -60,9 +66,45 @@ class TransferSecurityTest {
     @MockitoBean
     private TransferService transferService;
     @MockitoBean
+    private RecipientLookupService recipientLookupService;
+    @MockitoBean
     private JwtTokenProvider tokenProvider;
     @MockitoBean
     private UserDetailsService userDetailsService;
+
+    @Test
+    void shouldRequireAuthenticationForRecipientLookup() throws Exception {
+        mvc.perform(get("/api/v1/transfer/recipient").param("email", "recipient@example.com"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(recipientLookupService);
+    }
+
+    @Test
+    void shouldReturnOnlyRecipientExistenceWithoutCachingOrChangingMoney() throws Exception {
+        when(recipientLookupService.lookup(new RecipientLookupRequest("Recipient@example.com")))
+                .thenReturn(new RecipientLookupResponse(false));
+        mvc.perform(get("/api/v1/transfer/recipient").param("email", " Recipient@example.com ")
+                .with(authentication(principal())))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(jsonPath("$.data.exists").value(false))
+                .andExpect(jsonPath("$.data.id").doesNotExist())
+                .andExpect(jsonPath("$.data.email").doesNotExist());
+        verifyNoInteractions(transferService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "",
+            "bad-email",
+            "missing-at-sign.example.com"
+    })
+    void shouldRejectInvalidRecipientEmailBeforeLookup(String email) throws Exception {
+        mvc.perform(get("/api/v1/transfer/recipient").param("email", email)
+                .with(authentication(principal())))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(recipientLookupService, transferService);
+    }
 
     @Test
     void shouldAllowIdempotencyPreflightWithoutAuthentication() throws Exception {

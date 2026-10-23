@@ -20,13 +20,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import com.minh.paymentsystem.common.dto.PageResponse;
 import com.minh.paymentsystem.common.exception.BusinessException;
 import com.minh.paymentsystem.common.exception.ErrorCode;
-import com.minh.paymentsystem.transaction.dto.AdminTransactionFilterRequest;
 import com.minh.paymentsystem.transaction.dto.CreateTransactionCommand;
 import com.minh.paymentsystem.transaction.dto.TransactionFilterRequest;
 import com.minh.paymentsystem.transaction.dto.TransactionResponse;
@@ -153,27 +151,4 @@ class TransactionServiceImplTest {
         }
     }
 
-    @Test
-    void shouldPreserveAdminPageContentAndMetadata() {
-        AdminTransactionFilterRequest filter = new AdminTransactionFilterRequest(1L, null, TransactionType.DEPOSIT, TransactionStatus.SUCCESS, null, null);
-        Pageable pageable = PageRequest.of(2, 2);
-        Transaction transaction = Transaction.builder()
-                .id(100L)
-                .wallet(testWallet)
-                .type(TransactionType.DEPOSIT)
-                .status(TransactionStatus.SUCCESS)
-                .amount(new BigDecimal("50000"))
-                .description("Deposit")
-                .build();
-        when(transactionRepository.findWithAdminFilter(1L, null, TransactionType.DEPOSIT, TransactionStatus.SUCCESS, null, null, pageable))
-                .thenReturn(new PageImpl<>(List.of(transaction), pageable, 5));
-
-        PageResponse<TransactionResponse> response = transactionService.getAllTransactions(filter, pageable);
-
-        assertThat(response.content()).containsExactly(TransactionResponse.from(transaction));
-        assertThat(response.page()).isEqualTo(2);
-        assertThat(response.size()).isEqualTo(2);
-        assertThat(response.totalElements()).isEqualTo(5);
-        assertThat(response.totalPages()).isEqualTo(3);
-    }
 }

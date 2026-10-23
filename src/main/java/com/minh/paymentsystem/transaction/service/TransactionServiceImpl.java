@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.minh.paymentsystem.common.dto.PageResponse;
 import com.minh.paymentsystem.common.validation.WholeVnd;
-import com.minh.paymentsystem.transaction.dto.AdminTransactionFilterRequest;
 import com.minh.paymentsystem.transaction.dto.CreateTransactionCommand;
 import com.minh.paymentsystem.transaction.dto.TransactionFilterRequest;
 import com.minh.paymentsystem.transaction.dto.TransactionResponse;
@@ -64,23 +63,6 @@ public class TransactionServiceImpl implements TransactionService {
 
         Page<Transaction> transactionPage = transactionRepository.findWithFilter(
                 wallet.getId(),
-                filter.type(),
-                filter.status(),
-                filter.fromDate(),
-                filter.toDate(),
-                pageable);
-
-        return toPageResponse(transactionPage);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public PageResponse<TransactionResponse> getAllTransactions(AdminTransactionFilterRequest filter, Pageable pageable) {
-        log.debug("Admin fetching transactions for user id={}, type={}, status={}", filter.userId(), filter.type(), filter.status());
-
-        Page<Transaction> transactionPage = transactionRepository.findWithAdminFilter(
-                filter.userId(),
-                filter.email(),
                 filter.type(),
                 filter.status(),
                 filter.fromDate(),

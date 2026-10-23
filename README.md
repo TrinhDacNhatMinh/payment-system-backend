@@ -13,7 +13,6 @@ A monolithic backend service (REST API) built with Spring Boot for a simple e-wa
 - **VNPay Deposit**: Create a deposit order returning a VNPay payment URL. A webhook endpoint processes the VNPay IPN callback to credit the wallet exactly once (idempotent).
 - **Fund Transfer**: Secure internal transfer between users. Enforces self-transfer restrictions, sufficient balance checks, and handles concurrent requests using Optimistic Locking.
 - **Transaction History**: Track all deposit, transfer_in, and transfer_out activities. Provides a paginated history endpoint with filtering by type, status, and date.
-- **Admin Management**: Dedicated admin endpoints to fetch all system transactions and lock/unlock user accounts.
 
 ## Tech Stack
 
@@ -87,9 +86,6 @@ mvn test
 | GET    | `/api/v1/payment/vnpay-return`    | VNPay Return URL callback                  | None                                   |
 | POST   | `/api/v1/transfer`                | Transfer funds to another user             | USER                                   |
 | GET    | `/api/v1/transactions`            | View personal transaction history          | USER                                   |
-| GET    | `/api/v1/admin/transactions`      | View all system transactions               | ADMIN                                  |
-| PATCH  | `/api/v1/admin/users/{id}/lock`   | Lock a user account                        | ADMIN                                  |
-| PATCH  | `/api/v1/admin/users/{id}/unlock` | Unlock a user account                      | ADMIN                                  |
 
 ## Project Structure
 
@@ -320,5 +316,5 @@ Tested components:
 - `TransactionServiceImplTest` (create, log, filter)
 - `TransferServiceImplTest` (transfer happy/error paths)
 - `TransferServiceConcurrencyTest` (simulated concurrent transfers)
-- `UserServiceImplTest` (lock, unlock)
+- `UserServiceImplTest` (session locking and user lookup)
 - `WalletServiceImplTest` (credit, debit limits)

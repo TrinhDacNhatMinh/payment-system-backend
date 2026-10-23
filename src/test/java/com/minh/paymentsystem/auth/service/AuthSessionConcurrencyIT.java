@@ -192,7 +192,11 @@ class AuthSessionConcurrencyIT {
     @Test
     void shouldRefreshCachedUserAfterWaitingForSessionLock() {
         String token = refreshToken(authService.login(login));
-        Future<AuthResponse> waiting = startWaitingRequestAfter(() -> userService.lockUser(user.getId()),
+        Future<AuthResponse> waiting = startWaitingRequestAfter(() -> {
+            User locked = userRepository.findById(user.getId()).orElseThrow();
+            locked.setStatus(UserStatus.LOCKED);
+            userRepository.saveAndFlush(locked);
+        },
                 () -> transaction.execute(status -> {
                     User cached = userRepository.findById(user.getId()).orElseThrow();
                     assertThat(cached.getStatus()).isEqualTo(UserStatus.ACTIVE);

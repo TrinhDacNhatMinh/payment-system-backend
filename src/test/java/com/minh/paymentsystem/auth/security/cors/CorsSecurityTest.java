@@ -25,7 +25,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.web.SecurityFilterChain;
@@ -114,15 +113,20 @@ class CorsSecurityTest {
     }
 
     @Test
-    void shouldAllowAdminPatchPreflightWithoutGrantingAdminAccess() throws Exception {
-        mvc.perform(options("/api/v1/admin/users/1/lock")
+    void shouldRejectPatchPreflight() throws Exception {
+        mvc.perform(options("/api/v1/wallet/me")
                 .header(HttpHeaders.ORIGIN, ORIGIN)
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PATCH")
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "authorization"))
-                .andExpect(status().isOk())
-                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN));
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN))
+                .andExpect(jsonPath("$.error.code").value("ACCESS_DENIED"));
+        verifyNoInteractions(authService, tokenProvider, userDetailsService);
+    }
 
-        mvc.perform(get("/api/v1/cors-test/admin").header(HttpHeaders.ORIGIN, ORIGIN))
+    @Test
+    void shouldKeepCorsHeadersOnUnauthenticatedRequests() throws Exception {
+        mvc.perform(get("/api/v1/cors-test/protected").header(HttpHeaders.ORIGIN, ORIGIN))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN));
     }
@@ -258,23 +262,13 @@ class CorsSecurityTest {
         when(tokenProvider.getEmailFromToken("expired-token"))
                 .thenThrow(new ExpiredJwtException(null, null, "Expired"));
 
-        mvc.perform(get("/api/v1/cors-test/admin")
+        mvc.perform(get("/api/v1/cors-test/protected")
                 .header(HttpHeaders.ORIGIN, ORIGIN)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer expired-token"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
                 .andExpect(jsonPath("$.error.code").value("TOKEN_EXPIRED"));
-    }
-
-    @Test
-    @WithMockUser(roles = "USER")
-    void shouldKeepCorsHeadersOnAuthorizationErrors() throws Exception {
-        mvc.perform(get("/api/v1/cors-test/admin").header(HttpHeaders.ORIGIN, ORIGIN))
-                .andExpect(status().isForbidden())
-                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN))
-                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
-                .andExpect(jsonPath("$.error.code").value("ACCESS_DENIED"));
     }
 
     @Test
@@ -356,9 +350,8 @@ class CorsSecurityTest {
     @RestController
     public static class ProbeController {
 
-        @GetMapping("/api/v1/cors-test/admin")
-        @PreAuthorize("hasRole('ADMIN')")
-        public BaseResponse<Void> admin() {
+        @GetMapping("/api/v1/cors-test/protected")
+        public BaseResponse<Void> protectedResource() {
             return BaseResponse.success(null);
         }
 

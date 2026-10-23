@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.minh.paymentsystem.common.response.BaseResponse;
 import com.minh.paymentsystem.transfer.dto.TransferRequestError;
@@ -22,6 +24,15 @@ import com.minh.paymentsystem.transfer.exception.TransferRejectedException;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler({
+            NoHandlerFoundException.class,
+            NoResourceFoundException.class
+    })
+    public ResponseEntity<BaseResponse<Void>> handleNotFound(Exception exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(BaseResponse.error("NOT_FOUND", "Resource not found"));
+    }
 
     @ExceptionHandler(TransferRejectedException.class)
     public ResponseEntity<BaseResponse<Void>> handleTransferRejection(TransferRejectedException exception) {

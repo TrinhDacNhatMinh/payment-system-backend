@@ -188,73 +188,118 @@ erDiagram
 ### Sequence Diagram — Deposit (VNPay)
 
 ```mermaid
-sequenceDiagram
-    actor User
-    participant App as PaymentSystem
+<!-- sequenceDiagram
+    actor Client
+    participant Backend
+    participant Database
     participant VNPay
 
-    User->>App: POST /api/v1/payment/deposit (amount)
-    App->>App: Validate amount & create PaymentOrder (PENDING)
-    App-->>User: Return VNPay payment URL
-    User->>VNPay: Proceed to pay on VNPay sandbox
-    VNPay-->>User: Redirect to Return URL
-    VNPay->>App: GET IPN Webhook (vnpay-webhook)
-    App->>App: Verify checksum
-    alt Invalid Checksum
-        App-->>VNPay: Return 97 Invalid Checksum
-    else Valid Checksum
-        App->>App: Check Idempotency (Order must be PENDING)
-        alt Payment Success (00)
-            App->>App: Update Order to SUCCESS
-            App->>App: Credit Wallet & Create Transaction (DEPOSIT)
-        else Payment Failed
-            App->>App: Update Order to FAILED
-            App->>App: Create Transaction (FAILED)
-        end
-        App-->>VNPay: Return 00 Confirm Success
+    Client->>Backend: Create deposit with amount and Idempotency-Key<br/>/api/v1/payment/deposit
+    Backend->>Database: Find existing deposit request
+    Database-->>Backend: Existing order or no match
+    alt Existing request
+        Backend-->>Client: Return the same order and original link expiry
+    else New request
+        Backend->>Database: Save pending order and signed payment URL
+        Database-->>Backend: Order saved
+        Backend-->>Client: Return order and payment URL valid for 15 minutes
     end
+    Client->>VNPay: Open payment URL and complete payment
+
+    par Browser return
+        VNPay-->>Client: Redirect to backend return URL<br/>/api/v1/payment/vnpay-return
+        Client->>Backend: Send payment return parameters<br/>/api/v1/payment/vnpay-return
+        Backend->>Database: Read order to verify return
+        Database-->>Backend: Order details
+        Backend-->>Client: Redirect to frontend result page (HTTP 303)
+    and Payment notification (IPN)
+        VNPay->>Backend: Notify payment result<br/>/api/v1/payment/vnpay-webhook
+        Backend->>Database: Save payment result, transaction and any wallet changes together
+        Database-->>Backend: Committed result
+        Backend-->>VNPay: Acknowledge notification
+    end
+    Note over Client,VNPay: Return and IPN may arrive in either order
+    Client->>Backend: Look up deposit by order ID or request key<br/>/api/v1/payment/orders/{orderId}<br/>or /api/v1/payment/deposit/requests/{idempotencyKey}
+    Backend->>Database: Read order owned by the authenticated user
+    Database-->>Backend: Current payment status
+    Backend-->>Client: Return order status
+    Note over Client,Backend: Return alone does not confirm payment or credit the wallet -->
 ```
 
 ### Sequence Diagram — Transfer
 
 ```mermaid
 sequenceDiagram
-    actor Sender
-    participant App as TransferService
+    actor Client
+    participant Backend
+    participant Database
 
-    Sender->>App: POST /api/v1/transfer (toEmail, amount)
-    App->>App: Validate (amount > 0, sender != receiver, recipient ACTIVE)
-    App->>App: WalletService.debit(senderWalletId, amount) (Optimistic Locking)
-    alt OptimisticLockingFailureException (concurrent modification)
-        App-->>Sender: 409 CONCURRENT_MODIFICATION — please retry
-    else success
-        App->>App: WalletService.credit(recipientWalletId, amount)
-        App->>App: Create Transaction TRANSFER_OUT for Sender
-        App->>App: Create Transaction TRANSFER_IN for Receiver
-        App->>App: Link both transactions (related_transaction_id)
-        App-->>Sender: Return Success
+    Client->>Backend: Request transfer with recipient, amount and Idempotency-Key<br/>/api/v1/transfer
+    Backend->>Database: Register or read transfer request
+    Database-->>Backend: Request and any stored outcome
+    alt Request already completed
+        Backend-->>Client: Return stored receipt or rejection
+    else Request requires processing
+        Backend->>Database: Read sender and recipient wallets
+        Database-->>Backend: Wallet details
+        Backend->>Database: Update balances and save transactions and receipt together
+        Database-->>Backend: Committed transfer outcome
+        Backend-->>Client: Return transfer result
+    end
+    Note over Backend,Database: Failed processing does not commit partial money changes
+    opt Client needs to check an uncertain outcome
+        Client->>Backend: Look up transfer by the same request key<br/>/api/v1/transfer/requests/{idempotencyKey}
+        Backend->>Database: Read request owned by the authenticated user
+        Database-->>Backend: Current request status and stored outcome
+        Backend-->>Client: Return status without executing another transfer
     end
 ```
 
-### Sequence Diagram — JWT Authentication Flow
+### Sequence Diagram — Authentication & Sessions
 
 ```mermaid
 sequenceDiagram
     actor Client
-    participant Controller as AuthController / AuthService
-    participant Provider as JwtTokenProvider
-    participant Filter as JwtAuthenticationFilter
-    participant Context as SecurityContext
+    participant Backend
+    participant Database
 
-    Client->>Controller: POST /api/v1/auth/login (Origin + CSRF token)
-    Controller->>Provider: Generate tokens after credential validation
-    Provider-->>Controller: Tokens generated
-    Controller-->>Client: Access token and user JSON + HttpOnly refresh cookie
-    Client->>Filter: Request API with "Bearer <AccessToken>"
-    Filter->>Provider: Validate Access Token
-    Provider-->>Filter: Token valid (Claims)
-    Filter->>Context: Set Authentication (UsernamePasswordAuthenticationToken)
-    Context-->>Client: Proceed to Controller & Return Data
+    Client->>Backend: Request CSRF token<br/>/api/v1/auth/csrf
+    Backend-->>Client: CSRF token and matching cookie
+    Note over Client,Backend: Authentication POST requests require an allowed Origin and CSRF token/cookie
+    opt Register a new account
+        Client->>Backend: Submit registration details<br/>/api/v1/auth/register
+        Backend->>Database: Save user and wallet together
+        Database-->>Backend: Account created
+        Backend-->>Client: Return registered user
+    end
+
+    Client->>Backend: Submit email and password to log in<br/>/api/v1/auth/login
+    Backend->>Database: Read account
+    Database-->>Backend: Account details
+    Backend->>Database: Replace previous refresh session after successful authentication
+    Database-->>Backend: Session saved
+    Backend-->>Client: Access token, user details and HttpOnly refresh cookie
+    Note over Client,Backend: Fetch a new CSRF token after successful login
+
+    opt Refresh access token
+        Client->>Backend: Request refresh using refresh cookie<br/>/api/v1/auth/refresh
+        Backend->>Database: Read refresh session and account
+        Database-->>Backend: Session and account details
+        Backend->>Database: Replace validated refresh session
+        Database-->>Backend: New session saved
+        Backend-->>Client: New access token, user details and refresh cookie
+    end
+    Client->>Backend: Call protected API with Bearer access token<br/>e.g. /api/v1/wallet/me
+    Backend->>Database: Read current user and account status
+    Database-->>Backend: User details
+    Backend-->>Client: Return API response if authorized
+
+    opt Log out
+        Client->>Backend: Request logout using refresh cookie<br/>/api/v1/auth/logout
+        Backend->>Database: Revoke applicable refresh session
+        Database-->>Backend: Session ended or already ended
+        Backend-->>Client: Return success and clear refresh/CSRF cookies
+    end
 ```
 
 ### Key Technical Highlights
